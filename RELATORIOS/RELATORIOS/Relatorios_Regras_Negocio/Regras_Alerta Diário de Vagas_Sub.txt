@@ -1,0 +1,243 @@
+============================================================
+MAPEAMENTO DE REGRAS: Alerta Diário de Vagas_Sub.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: DT_ATUALIZAÇAO
+  Colunas:
+    - DT_ATUALIZAÇAO [dateTime]
+----------------------------------------
+Tabela: DIM_CIDADE
+  Colunas:
+    - COD_UNIDADE [int64]
+    - NM_RAZAO SOCIAL [string]
+    - NM_FANTASIA [string]
+    - NM_SITE [string]
+    - NM_CIDADE [string]
+    - COD_FILIAL [string]
+    - NM_FILIAL [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - LOCALIZAÇÃO [string]
+    - APENAS [string]
+    - CAPTADO [string]
+    - RESPONSAVEL [string]
+    - TIPO [string]
+    - REGIONAL [string]
+    - POLO [string]
+    - CD_LOCALIDADE [string]
+    - REGIAO BRASIL [string]
+    - STATUS [string]
+    - TIPO_REDE [string]
+    - NR_TIPO_SERVICO_SAUDE [string]
+    - COD_EMPRESA [double]
+    - CD_EMP_UNIF [double]
+    - SUB REGIAO [string]
+    - CD_LOCALIDADE_POLO [string]
+    - CD_CIDADE_IBGE [double]
+    - ENDERECO [string]
+    - RUA [string]
+    - NUMERO [double]
+    - BAIRRO [string]
+    - TIPO_LOGRADOURO [string]
+    - CEP [string]
+    - LATITUDE [string]
+    - LONGITUDE [string]
+    - CD_LOCALIDADE_CIDADE [string]
+----------------------------------------
+Tabela: DIM_ESPECIALIDADE
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - ESPECIALIDADE [string]
+----------------------------------------
+Tabela: FATO_ALERTA_SUB
+  Colunas:
+    - DATA [dateTime]
+    - HORA [int64]
+    - TURNO [string]
+    - CD_LOCAL [int64]
+    - CD_PRESTADOR [int64]
+    - CD_ESPECIALIDADE [int64]
+    - TIPO_META [string]
+    - META [int64]
+    - QTE_CONSULTAS [int64]
+    - QTE_ENCAIXES [int64]
+    - CONS+ENC [int64]
+    - SUBESPECIALIDADE [string]
+    - PRESTADOR_SUB [string]
+----------------------------------------
+Tabela: DIM_CALENDARIO
+  Colunas:
+    - Date [dateTime]
+    - ANO [int64]
+    - MES [string]
+    - DATA [dateTime]
+----------------------------------------
+Tabela: DIM_CALENDARIO_2
+  Colunas:
+    - Date [dateTime]
+    - ANO [int64]
+    - MES [string]
+    - MES_ANO [string]
+----------------------------------------
+Tabela: _MEDIDAS
+  Colunas:
+    - Column [int64]
+  Medidas DAX (Regras de Negócio):
+    - 01.1_VAGAS_DIA_ATUAL_CONSULTAS:
+      
+      
+      VAR _vUltimaData = MAX(DIM_CALENDARIO[Date])
+      
+      RETURN
+      CALCULATE(
+          '_MEDIDAS'[01_QTD_CONSULTAS],
+          ALL(DIM_CALENDARIO[Date]),
+          DIM_CALENDARIO[Date] = _vUltimaData
+      )
+    - 01_QTD_CONSULTAS:
+      SUM('FATO_ALERTA_SUB'[QTE_CONSULTAS]) 
+    - 02_QTD_ENCAIXES:
+      SUM('FATO_ALERTA_SUB'[QTE_ENCAIXES])
+    - 03_QTD_CONS_+_ENCAIXE:
+      SUM('FATO_ALERTA_SUB'[CONS+ENC])
+    - 02.1_VAGAS_DIA_ATUAL_ENCAIXES:
+      
+      
+      VAR _vUltimaData = MAX(DIM_CALENDARIO[Date])
+      
+      RETURN
+      CALCULATE(
+          _MEDIDAS[02_QTD_ENCAIXES],
+          ALL(DIM_CALENDARIO[Date]),
+          DIM_CALENDARIO[Date] = _vUltimaData
+      )
+      
+    - 03.1_VAGAS_DIA_ATUAL_CONS_+_ENC:
+      
+      
+      VAR _vUltimaData = MAX(DIM_CALENDARIO[Date])
+      
+      RETURN
+      CALCULATE(
+          _MEDIDAS[03_QTD_CONS_+_ENCAIXE],
+          ALL(DIM_CALENDARIO[Date]),
+          DIM_CALENDARIO[Date] = _vUltimaData
+      )
+      
+    - 04_VAGAS_MANHA_APENAS_CONSULTAS:
+      
+      
+      CALCULATE(
+          '_MEDIDAS'[01_QTD_CONSULTAS],
+          FILTER(
+              'FATO_ALERTA_SUB',
+              'FATO_ALERTA_SUB'[TURNO] = "M" &&
+              'FATO_ALERTA_SUB'[HORA] = MIN('FATO_ALERTA_SUB'[HORA])
+          
+          )
+      )
+      
+    - 04.1_VAGAS_MANHA_COM_ENCAIXES:
+      
+      CALCULATE(
+          '_MEDIDAS'[03_QTD_CONS_+_ENCAIXE],
+          FILTER(
+              'FATO_ALERTA_SUB',
+              'FATO_ALERTA_SUB'[TURNO] = "M" &&
+              'FATO_ALERTA_SUB'[HORA] = MIN('FATO_ALERTA_SUB'[HORA])
+          
+          )
+      )
+      
+    - 05_VAGAS_TARDE_APENAS_CONSULTAS:
+      
+      CALCULATE(
+          '_MEDIDAS'[01_QTD_CONSULTAS],
+          FILTER(
+              'FATO_ALERTA_SUB',
+              'FATO_ALERTA_SUB'[TURNO] = "T" &&
+              'FATO_ALERTA_SUB'[HORA] = MAX('FATO_ALERTA_SUB'[HORA])
+          
+          )
+      )
+    - 05.1_VAGAS_TARDE_COM_ENCAIXES:
+      
+      
+       CALCULATE(
+          '_MEDIDAS'[03_QTD_CONS_+_ENCAIXE],
+          FILTER(
+              'FATO_ALERTA_SUB',
+              'FATO_ALERTA_SUB'[TURNO] = "T" &&
+              'FATO_ALERTA_SUB'[HORA] = MAX('FATO_ALERTA_SUB'[HORA])
+          
+          )
+      )
+      
+    - 01_QTD_DIAS_ZERADOS:
+      
+      VAR Limite = [Valor VagaDiaZerado]
+      RETURN
+      IF (
+          MINX ( VALUES ( 'FATO_DIAS_ZERADOS'[NM_CIDADE] ), [01_MAX_DIAS_ZERADOS] ) = 0,
+          0,
+          MAXX ( VALUES ( 'FATO_DIAS_ZERADOS'[NM_CIDADE] ), [01_MAX_DIAS_ZERADOS] )
+      )
+      
+    - 01_MAX_DIAS_ZERADOS:
+      MAX(FATO_DIAS_ZERADOS[QT_DIAS_ZERADOS])
+----------------------------------------
+Tabela: PARÂMETRO_ALERTA_SUB
+  Colunas:
+    - Parâmetro [string]
+    - Parâmetro Campos [string]
+    - Parâmetro Pedido [int64]
+----------------------------------------
+Tabela: FATO_DIAS_ZERADOS
+  Colunas:
+    - SUB REGIAO [string]
+    - UF [string]
+    - NM_CIDADE [string]
+    - EMPRESA [string]
+    - TIPO_META [string]
+    - CD_ESPECIALIDADE [string]
+    - SUBESPECIALIDADE [string]
+    - TIPO [string]
+    - ESPECIALIDADE [string]
+    - MES_ANO [string]
+    - QT_DIAS_ZERADOS [int64]
+----------------------------------------
+Tabela: DIM_PRESTADOR
+  Colunas:
+    - CD_PRESTADOR [int64]
+    - PRESTADOR [string]
+    - SUBESPECIALIDADE [string]
+    - PRESTADOR_SUB [string]
+    - CHAVE [string]
+----------------------------------------
+Tabela: Tabela
+  Colunas:
+    - Column [int64]
+----------------------------------------
+Tabela: VagaDiaZerado
+  Colunas:
+    - VagaDiaZerado [int64]
+  Medidas DAX (Regras de Negócio):
+    - Valor VagaDiaZerado:
+      SELECTEDVALUE('VagaDiaZerado'[VagaDiaZerado])
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+DT_ATUALIZAÇAO[DT_ATUALIZAÇAO] ---> LocalDateTable_865249e9-2403-4e31-bf28-0c1e6d15a62d[Date]
+FATO_ALERTA_SUB[CD_LOCAL] ---> DIM_CIDADE[COD_UNIDADE]
+FATO_ALERTA_SUB[CD_ESPECIALIDADE] ---> DIM_ESPECIALIDADE[CD_ESPECIALIDADE]
+DIM_CALENDARIO[Date] ---> LocalDateTable_2251ded3-66a1-4cbc-b11f-9a05e4520877[Date]
+FATO_ALERTA_SUB[DATA] ---> DIM_CALENDARIO[Date]
+DIM_CALENDARIO[DATA] ---> LocalDateTable_14691b84-80b7-4c66-a0b4-8b437f07982b[Date]
+FATO_ALERTA_SUB[PRESTADOR_SUB] ---> DIM_PRESTADOR[CHAVE]
+DIM_CALENDARIO_2[Date] ---> LocalDateTable_da8872d9-2c4a-423f-a2c3-88b099a877d1[Date]
+DIM_CALENDARIO[MES] ---> DIM_CALENDARIO_2[MES]
+FATO_DIAS_ZERADOS[MES_ANO] ---> DIM_CALENDARIO_2[MES_ANO]

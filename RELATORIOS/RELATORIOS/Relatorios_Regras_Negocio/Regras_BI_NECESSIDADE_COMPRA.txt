@@ -1,0 +1,1942 @@
+============================================================
+MAPEAMENTO DE REGRAS: BI_NECESSIDADE_COMPRA.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: DIM_NECESSIDADE_COMPRA
+  Colunas:
+    - DIRETOR [string]
+    - DIRETORIA [string]
+    - TIPO_COMPRA [string]
+    - FL_STATUS_ATIVO [string]
+    - FL_REPORT_ALAIN [string]
+    - CHAVE [string]
+----------------------------------------
+Tabela: DIM_CALENDARIO
+  Colunas:
+    - Date [dateTime]
+    - ANO [int64]
+    - MES [string]
+----------------------------------------
+Tabela: _MEDIDAS
+  Colunas:
+    - Column [int64]
+  Medidas DAX (Regras de Negócio):
+    - 01_SUM_COMPRA:
+      
+      VAR _UltimoSnapshot =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT])
+          )
+      RETURN
+      CALCULATE(
+          SUMX(
+              VALUES(BASE_FATO_NECESSIDADE_COMPRA[CHAVE]),
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+              )
+          ),
+          BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _UltimoSnapshot
+      )
+    - 02_SUM_DISP:
+      
+      VAR _UltimoSnapshot =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT])
+          )
+      RETURN
+      CALCULATE(
+          SUMX(
+              VALUES(BASE_FATO_NECESSIDADE_COMPRA[CHAVE]),
+              CALCULATE(MAX(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]))
+          ),
+          BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _UltimoSnapshot
+      )
+    - 03_SUM_MARCADAS:
+      
+      
+      VAR _UltimoSnapshot =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT])
+          )
+      
+      RETURN
+      CALCULATE(
+          SUMX(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                  "MarcadasFoto",
+                      MAX(BASE_FATO_NECESSIDADE_COMPRA[MARCADAS])
+              ),
+              [MarcadasFoto]
+          ),
+          BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _UltimoSnapshot
+      )
+    - 04_(%)ENTREGA:
+      
+      DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0)
+    - 05_SALDO_COMPRA:
+      '_MEDIDAS'[01_SUM_COMPRA] - '_MEDIDAS'[02_SUM_DISP] 
+    - 06_(%)_MARC_VS_DISP:
+      DIVIDE('_MEDIDAS'[03_SUM_MARCADAS],'_MEDIDAS'[02_SUM_DISP],0)
+    - 0_MSG_BOAS_VINDAS:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+    - 07_VOL_ESPECIALIDADE_PREV_COMPRA:
+      
+      VAR _UltimoSnapshot =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT])
+          )
+      RETURN
+      CALCULATE(
+          COUNTROWS(BASE_FATO_NECESSIDADE_COMPRA),
+          FILTER(
+              BASE_FATO_NECESSIDADE_COMPRA,
+              VAR EspecialidadeAtual =
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+      
+              VAR LocalidadeAtual =
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_LOCALIDADE_CIDADE]
+      
+              VAR FilialAtual =
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_FILIAL]
+      
+              VAR MesAtual =
+                  RELATED(DIM_CALENDARIO[MES])
+      
+              VAR EhMistaDim =
+                  CALCULATE(
+                      COUNTROWS(DIM_MISTAS),
+                      FILTER(
+                          ALL(DIM_MISTAS),
+                          DIM_MISTAS[CD_ESPECIALIDADE] = EspecialidadeAtual
+                              &&
+                          DIM_MISTAS[CD_LOCALIDADE] = LocalidadeAtual
+                              &&
+                          DIM_MISTAS[COD_FILIAL] = FilialAtual
+                              &&
+                          DIM_MISTAS[MES_FORMATADO] = MesAtual
+                      )
+                  )
+      
+              RETURN
+                  BASE_FATO_NECESSIDADE_COMPRA[COMPRA] > 0
+                      &&
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _UltimoSnapshot
+                      &&
+                  UPPER(TRIM(BASE_FATO_NECESSIDADE_COMPRA[GRUPO_ASSERTIVIDADE_MODELO])) <> "MISTAS"
+                      &&
+                  EhMistaDim = 0
+          )
+      )
+    - 08_VOL. ESPECIALIDADE COM ENTREGA DA NECESSIDADE >90%:
+      
+      VAR _UltimoSnapshot =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT])
+          )
+      RETURN
+      CALCULATE(
+          COUNTROWS(BASE_FATO_NECESSIDADE_COMPRA),
+          FILTER(
+              BASE_FATO_NECESSIDADE_COMPRA,
+              VAR EspecialidadeAtual =
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+      
+              VAR LocalidadeAtual =
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_LOCALIDADE_CIDADE]
+      
+              VAR FilialAtual =
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_FILIAL]
+      
+              VAR MesAtual =
+                  RELATED(DIM_CALENDARIO[MES])
+      
+              VAR EhMistaDim =
+                  CALCULATE(
+                      COUNTROWS(DIM_MISTAS),
+                      FILTER(
+                          ALL(DIM_MISTAS),
+                          DIM_MISTAS[CD_ESPECIALIDADE] = EspecialidadeAtual
+                              &&
+                          DIM_MISTAS[CD_LOCALIDADE] = LocalidadeAtual
+                              &&
+                          DIM_MISTAS[COD_FILIAL] = FilialAtual
+                              &&
+                          DIM_MISTAS[MES_FORMATADO] = MesAtual
+                      )
+                  )
+      
+              RETURN
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _UltimoSnapshot
+                      &&
+                  BASE_FATO_NECESSIDADE_COMPRA[COMPRA] > 0
+                      &&
+                  UPPER(TRIM(BASE_FATO_NECESSIDADE_COMPRA[GRUPO_ASSERTIVIDADE_MODELO])) <> "MISTAS"
+                      &&
+                  EhMistaDim = 0
+                      &&
+                  DIVIDE(
+                      BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS],
+                      BASE_FATO_NECESSIDADE_COMPRA[COMPRA],
+                      0
+                  ) >= 0.90
+          )
+      )
+    - 09_%_VOL_ESPECIALIDADE_ACIMA_90%:
+      
+      DIVIDE(
+          [08_VOL. ESPECIALIDADE COM ENTREGA DA NECESSIDADE >90%],
+          [07_VOL_ESPECIALIDADE_PREV_COMPRA],
+          0
+      )
+    - 10_STATUS_ACIMA_90%:
+      
+      VAR TabelaResumo =
+          SUMMARIZE(
+              BASE_FATO_NECESSIDADE_COMPRA,
+              DIM_CIDADE[SUB_REGIAO],
+              DIM_CIDADE[EMPRESA],
+              DIM_CIDADE[NM_CIDADE],
+              DIM_NECESSIDADE_COMPRA[DIRETOR],
+              DIM_NECESSIDADE_COMPRA[DIRETORIA],
+              BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE],
+              "Compra", SUM(BASE_FATO_NECESSIDADE_COMPRA[COMPRA]),
+              "Disponibilizadas", SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS])
+          )
+      
+      VAR LinhasFiltradas =
+          FILTER(
+              TabelaResumo,
+              DIVIDE([Disponibilizadas], [Compra], 0) >= 0.9
+          )
+      
+      RETURN
+      IF(
+          COUNTROWS(LinhasFiltradas) > 0,
+          "ENTREGUE ✅",
+          "NÃO ENTREGUE ❌"
+      )
+      
+    - 11_FILTRO_DADOS_TABELA:
+      
+      IF(
+          CALCULATE(
+              COUNTROWS(BASE_FATO_NECESSIDADE_COMPRA)
+          ) > 0,
+          1,
+          BLANK()
+      )
+      
+    - 12_STATUS_ACIMA_90%:
+      
+      VAR GrupoAtual =
+          SELECTEDVALUE(BASE_FATO_NECESSIDADE_COMPRA[GRUPO_ASSERTIVIDADE_MODELO])
+      
+      VAR EspecialidadeAtual =
+          SELECTEDVALUE(BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE])
+      
+      VAR LocalidadeAtual =
+          SELECTEDVALUE(BASE_FATO_NECESSIDADE_COMPRA[CD_LOCALIDADE_CIDADE])
+      
+      VAR FilialAtual =
+          SELECTEDVALUE(BASE_FATO_NECESSIDADE_COMPRA[CD_FILIAL])
+      
+      VAR MesAtual =
+          SELECTEDVALUE(DIM_CALENDARIO[MES])
+      
+      VAR EhMistaDim =
+          CALCULATE(
+              COUNTROWS(DIM_MISTAS),
+              FILTER(
+                  ALL(DIM_MISTAS),
+                  DIM_MISTAS[CD_ESPECIALIDADE] = EspecialidadeAtual
+                      &&
+                  DIM_MISTAS[CD_LOCALIDADE] = LocalidadeAtual
+                      &&
+                  DIM_MISTAS[COD_FILIAL] = FilialAtual
+                      &&
+                  DIM_MISTAS[MES_FORMATADO] = MesAtual
+              )
+          )
+      
+      VAR Disponibilizada =
+          '_MEDIDAS'[02_SUM_DISP]
+      
+      VAR Perc_Entrega =
+          DIVIDE('_MEDIDAS'[02_SUM_DISP], '_MEDIDAS'[01_SUM_COMPRA], 0)
+      
+      VAR VALOR_FINAL =
+          IF(
+              GrupoAtual = "MISTAS"
+                  || EhMistaDim > 0,
+              "MISTA 🔀",
+              IF(
+                  Disponibilizada = 0,
+                  "❌ NÃO ENTREGUE",
+                  IF(
+                      Perc_Entrega = BLANK(),
+                      BLANK(),
+                      IF(
+                          Perc_Entrega >= 0.9,
+                          "✅ ENTREGUE",
+                          "❌ NÃO ENTREGUE"
+                      )
+                  )
+              )
+          )
+      
+      RETURN
+          VALOR_FINAL
+    - 13_STATUS_VOL_ACIMA_90%:
+      
+      VAR Perc_Entrega = [09_%_VOL_ESPECIALIDADE_ACIMA_90%]
+      RETURN
+      IF(
+          Perc_Entrega >= 0.9,
+          "ENTREGUE ✅",
+          "NÃO ENTREGUE ❌"
+      )
+    - 14_LINHA_CONSOLIDADO:
+      "CONSOLIDADO"
+    - 15_COMPRA_TELE:
+      
+      CALCULATE(
+          SUM(BASE_FATO_NECESSIDADE_COMPRA[COMPRA]), 
+          BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA"
+      )
+    - _DataRef:
+      TODAY()
+    - _AnoRef:
+      YEAR(TODAY())
+    - _MesRef:
+      MONTH(TODAY())
+    - _Data_15_MesAtual:
+      
+      DATE(YEAR(TODAY()), MONTH(TODAY()), 15)
+    - _Data_20_MesAtual:
+      
+      DATE(YEAR(TODAY()), MONTH(TODAY()), 20)
+    - _Data_01_MesSeguinte:
+      
+      DATE(YEAR(TODAY()), MONTH(TODAY()) + 1, 1)
+    - _Data_15_MesSeguinte:
+      
+      DATE(YEAR(TODAY()), MONTH(TODAY()) + 1, 15)
+    - 16_ENTREGA_15_MES_ATUAL:
+      
+      SUMX(
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE],
+                  "COMPRA_TOTAL", [15_COMPRA_TELE],
+                  "PRAZO", LOOKUPVALUE(
+                      PRAZO_ANS[QT_DIAS_ANS],
+                      PRAZO_ANS[CD_ESPECIALIDADE], BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                  )
+              ),
+              [PRAZO] = 14
+          ),
+          [COMPRA_TOTAL] * 0.5
+      )
+    - 17_ENTREGA_20_MES_ATUAL:
+      
+      SUMX(
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE],
+                  "COMPRA_TOTAL", [15_COMPRA_TELE],
+                  "PRAZO", LOOKUPVALUE(
+                      PRAZO_ANS[QT_DIAS_ANS],
+                      PRAZO_ANS[CD_ESPECIALIDADE], BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                  )
+              ),
+              [PRAZO] IN {7, 10}
+          ),
+          [COMPRA_TOTAL] * (1/3)
+      )
+    - 18_ENTREGA_01_MES_SEGUINTE:
+      
+      SUMX(
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE],
+                  "COMPRA_TOTAL", [15_COMPRA_TELE],
+                  "PRAZO", LOOKUPVALUE(
+                      PRAZO_ANS[QT_DIAS_ANS],
+                      PRAZO_ANS[CD_ESPECIALIDADE], BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                  )
+              ),
+              [PRAZO] IN {7, 10}
+          ),
+          [COMPRA_TOTAL] * (1/3)
+      )
+    - 19_ENTREGA_15_MES_SEGUINTE:
+      
+      SUMX(
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE],
+                  "COMPRA_TOTAL", [15_COMPRA_TELE],
+                  "PRAZO", LOOKUPVALUE(
+                      PRAZO_ANS[QT_DIAS_ANS],
+                      PRAZO_ANS[CD_ESPECIALIDADE], BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                  )
+              ),
+              [PRAZO] IN {7, 10, 14}
+          ),
+          IF(
+              [PRAZO] = 14,
+              [COMPRA_TOTAL] * 0.5,
+              [COMPRA_TOTAL] * (1/3)
+          )
+      )
+    - 20_TOTAL_ENTREGAS:
+      
+      [16_ENTREGA_15_MES_ATUAL] +
+      [17_ENTREGA_20_MES_ATUAL] +
+      [18_ENTREGA_01_MES_SEGUINTE] +
+      [19_ENTREGA_15_MES_SEGUINTE]
+    - 21_SEM_ENTREGA_20:
+      
+      [15_COMPRA_TELE] - [16_ENTREGA_15_MES_ATUAL]
+    - 22_PERC_ENTREGA_PARCIAL:
+      
+      DIVIDE(
+          [02_SUM_DISP_TELE],
+          [15_COMPRA_TELE],
+          0
+      )
+    - Especialidade_TeleSaude:
+      
+      CALCULATE(
+          COUNTROWS(BASE_FATO_NECESSIDADE_COMPRA),
+          BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA"
+      )
+    - 02_SUM_DISP_TELE:
+      
+      CALCULATE(
+          SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+          BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA"
+      )
+    - HTML_Metas_Tele:
+      
+      
+      VAR _DataSelecionada = MAX('DIM_CALENDARIO'[Date]) 
+      VAR _MesFiltro = MONTH(_DataSelecionada)
+      VAR _AnoFiltro = YEAR(_DataSelecionada)
+      
+      VAR _DataSeg = DATE(_AnoFiltro, _MesFiltro, 1)
+      VAR _DataRef = EDATE(_DataSeg, -1)
+      
+      VAR _NomeMesRef = UPPER(FORMAT(_DataRef, "MMM"))
+      VAR _NomeMesSeg = UPPER(FORMAT(_DataSeg, "MMM"))
+      
+      VAR _D15A = DATE(YEAR(_DataRef), MONTH(_DataRef), 15)
+      VAR _D20A = DATE(YEAR(_DataRef), MONTH(_DataRef), 20)
+      VAR _D01S = DATE(YEAR(_DataSeg), MONTH(_DataSeg), 1)
+      VAR _D15S = DATE(YEAR(_DataSeg), MONTH(_DataSeg), 15)
+      VAR _D01ProxMes = EDATE(_DataSeg, 1)
+      
+      VAR _Hoje = TODAY()
+      
+      VAR _Corte15A = IF(_Hoje >= _D15A, _D15A, _Hoje)
+      VAR _Corte20A = IF(_Hoje >= _D20A, _D20A, _Hoje)
+      VAR _Corte01S = IF(_Hoje >= _D01S, _D01S, _Hoje)
+      VAR _Corte15S = IF(_Hoje >= _D15S, _D15S, _Hoje)
+      VAR _CorteFechamento = IF(_Hoje >= _D01ProxMes, _D01ProxMes, _Hoje)
+      
+      VAR _UltimoSnapshotBase =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS('DIM_CALENDARIO')
+          )
+      
+      VAR _TabelaBase =
+          CALCULATETABLE(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+              ),
+              KEEPFILTERS(BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA"),
+              ALL('DIM_CALENDARIO'),
+              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg
+          )
+      
+      VAR _TabelaOrdenada =
+          ADDCOLUMNS(
+              _TabelaBase,
+              "@AdFinal",
+                  VAR _IdOrd = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+      
+                  VAR _SnapCompraOrd =
+                      CALCULATE(
+                          MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                          REMOVEFILTERS('DIM_CALENDARIO'),
+                          BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                          BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                          BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _IdOrd
+                      )
+      
+                  VAR _CompraOrd =
+                      CALCULATE(
+                          SUMX(
+                              SUMMARIZE(
+                                  BASE_FATO_NECESSIDADE_COMPRA,
+                                  BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                                  "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                              ),
+                              [CompraFoto]
+                          ),
+                          REMOVEFILTERS('DIM_CALENDARIO'),
+                          BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                          BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                          BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _IdOrd,
+                          BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapCompraOrd
+                      )
+      
+                  VAR _EntregaOrd =
+                      CALCULATE(
+                          SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                          REMOVEFILTERS('DIM_CALENDARIO'),
+                          BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                          BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                          BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _IdOrd,
+                          BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapCompraOrd
+                      )
+      
+                  RETURN
+                      DIVIDE(_EntregaOrd, _CompraOrd, 0)
+          )
+      
+      VAR _GerarLinhas = 
+      CONCATENATEX(
+          _TabelaOrdenada,
+      
+          VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+      
+          VAR _Esp =
+              LOOKUPVALUE(
+                  DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+                  DIM_ESPECIALIDADE[CD_ESPECIALIDADE], _Id
+              )
+      
+          VAR _P =
+              LOOKUPVALUE(
+                  PRAZO_ANS[QT_DIAS_ANS],
+                  PRAZO_ANS[CD_ESPECIALIDADE], _Id
+              )
+      
+          VAR _SnapCompra =
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id
+              )
+      
+          VAR _C =
+              CALCULATE(
+                  SUMX(
+                      SUMMARIZE(
+                          BASE_FATO_NECESSIDADE_COMPRA,
+                          BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                          "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                      ),
+                      [CompraFoto]
+                  ),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapCompra
+              )
+      
+          VAR _EntregaMes =
+              CALCULATE(
+                  SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapCompra
+              )
+      
+          VAR _SnapFechamento =
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _CorteFechamento
+              )
+      
+          VAR _FechamentoDisp =
+              CALCULATE(
+                  SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapFechamento
+              )
+      
+          VAR _PercFechamento = DIVIDE(_FechamentoDisp, _C, 0)
+      
+          VAR _CellFechamento =
+              IF(
+                  NOT ISBLANK(_SnapFechamento),
+                  "<div class='mini'>
+                      <div class='mh'>
+                          <span>DISP</span>
+                          <span>%</span>
+                      </div>
+                      <div class='mv'>
+                          <span class='nec'>" & FORMAT(_FechamentoDisp, "#,0") & "</span>
+                          <span>" &
+                              IF(_PercFechamento >= 0.9, "🟢 ", "🔴 ") &
+                              FORMAT(_PercFechamento, "0.0%") &
+                          "</span>
+                      </div>
+                  </div>",
+                  "—"
+              )
+      
+          VAR _Snap15A =
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte15A
+              )
+      
+          VAR _Snap20A =
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte20A
+              )
+      
+          VAR _Snap01S =
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte01S
+              )
+      
+          VAR _Snap15S =
+              CALCULATE(
+                  MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte15S
+              )
+      
+          VAR _E15A =
+              CALCULATE(
+                  SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap15A
+              )
+      
+          VAR _E20A =
+              CALCULATE(
+                  SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap20A
+              )
+      
+          VAR _E01S =
+              CALCULATE(
+                  SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap01S
+              )
+      
+          VAR _E15S =
+              CALCULATE(
+                  SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                  REMOVEFILTERS('DIM_CALENDARIO'),
+                  BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                  BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                  BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap15S
+              )
+      
+          VAR _Meta15A = IF(_P = 14, _C * 0.5)
+          VAR _Meta20A = IF(_P IN {7,10}, _C / 3)
+          VAR _Meta01S = IF(_P IN {7,10}, _C * 0.6666666667)
+          VAR _Meta15S = _C
+      
+          VAR _R15A = DIVIDE(_E15A, _Meta15A, 0)
+          VAR _R20A = DIVIDE(_E20A, _Meta20A, 0)
+          VAR _R01S = DIVIDE(_E01S, _Meta01S, 0)
+          VAR _R15S = DIVIDE(_E15S, _Meta15S, 0)
+      
+          VAR _AdFinal = DIVIDE(_EntregaMes, _C, 0)
+      
+          VAR _Cell15A =
+              IF(
+                  _P = 14 && NOT ISBLANK(_Snap15A),
+                  "<div class='mini'>
+                      <div class='mh'>
+                          <span>META</span>
+                          <span>DISP/%</span>
+                      </div>
+                      <div class='mv'>
+                          <span class='nec'>" & FORMAT(_Meta15A, "#,0") & "</span>
+                          <span>" &
+                              FORMAT(_E15A, "#,0") &
+                              " / " &
+                              IF(_R15A >= 0.9, "🟢 ", "🔴 ") &
+                              FORMAT(_R15A, "0.0%") &
+                          "</span>
+                      </div>
+                  </div>",
+                  "—"
+              )
+      
+          VAR _Cell20A =
+              IF(
+                  _P IN {7,10} && NOT ISBLANK(_Snap20A),
+                  "<div class='mini'>
+                      <div class='mh'>
+                          <span>META</span>
+                          <span>DISP/%</span>
+                      </div>
+                      <div class='mv'>
+                          <span class='nec'>" & FORMAT(_Meta20A, "#,0") & "</span>
+                          <span>" &
+                              FORMAT(_E20A, "#,0") &
+                              " / " &
+                              IF(_R20A >= 0.9, "🟢 ", "🔴 ") &
+                              FORMAT(_R20A, "0.0%") &
+                          "</span>
+                      </div>
+                  </div>",
+                  "—"
+              )
+      
+          VAR _Cell01S =
+              IF(
+                  _P IN {7,10} && NOT ISBLANK(_Snap01S),
+                  "<div class='mini'>
+                      <div class='mh'>
+                          <span>META</span>
+                          <span>DISP/%</span>
+                      </div>
+                      <div class='mv'>
+                          <span class='nec'>" & FORMAT(_Meta01S, "#,0") & "</span>
+                          <span>" &
+                              FORMAT(_E01S, "#,0") &
+                              " / " &
+                              IF(_R01S >= 0.9, "🟢 ", "🔴 ") &
+                              FORMAT(_R01S, "0.0%") &
+                          "</span>
+                      </div>
+                  </div>",
+                  "—"
+              )
+      
+          VAR _Cell15S =
+              IF(
+                  NOT ISBLANK(_Snap15S),
+                  "<div class='mini'>
+                      <div class='mh'>
+                          <span>META</span>
+                          <span>DISP/%</span>
+                      </div>
+                      <div class='mv'>
+                          <span class='nec'>" & FORMAT(_Meta15S, "#,0") & "</span>
+                          <span>" &
+                              FORMAT(_E15S, "#,0") &
+                              " / " &
+                              IF(_R15S >= 0.9, "🟢 ", "🔴 ") &
+                              FORMAT(_R15S, "0.0%") &
+                          "</span>
+                      </div>
+                  </div>",
+                  "—"
+              )
+      
+          RETURN
+          "<tr class='row-line'>
+              <td class='esp bg-light'>" & _Esp & "</td>
+              <td class='sla bg-light'>" & _P & "d</td>
+              <td class='compra bg-light'>" & FORMAT(_C, "#,0") & "</td>
+              <td class='nr'>" & _Cell15A & "</td>
+              <td class='nr'>" & _Cell20A & "</td>
+              <td class='nr'>" & _Cell01S & "</td>
+              <td class='nr'>" & _Cell15S & "</td>
+              <td class='nr bg-light'>" & _CellFechamento & "</td>
+          </tr>",
+        ""
+      )
+      
+      VAR _CSS =
+      "<style>
+      
+      *{
+          box-sizing:border-box;
+      }
+      
+      html, body{
+          margin:0;
+          padding:0;
+          border:none;
+          outline:none;
+          overflow:hidden;
+          background:transparent;
+      }
+      
+      .table-wrap{
+          width:100%;
+          max-height:700px;
+      
+          overflow-y:auto;
+          overflow-x:hidden;
+      
+          border:none !important;
+          outline:none !important;
+          box-shadow:none !important;
+      
+          scrollbar-width:none;
+          -ms-overflow-style:none;
+      
+          background:transparent;
+      }
+      
+      .table-wrap::-webkit-scrollbar{
+          width:0px;
+          height:0px;
+      }
+      
+      table{
+          width:100%;
+          border-collapse:separate;
+          border-spacing:0;
+          font-family:Segoe UI;
+      
+          border:none !important;
+          outline:none !important;
+          box-shadow:none !important;
+      }
+      
+      thead th{
+          position:sticky;
+          top:0;
+          z-index:10;
+      }
+      
+      th{
+          background:#118DFF;
+          color:white;
+          padding:10px;
+          font-size:14px;
+          border-right:1px solid rgba(255,255,255,0.25);
+          text-align:center;
+          font-weight:800;
+      }
+      
+      td{
+          padding:10px 8px;
+          border-right:1px solid #ececec;
+          text-align:center;
+          font-size:14px;
+          font-weight:600;
+          color:black;
+          background:white;
+      }
+      
+      th:last-child,
+      td:last-child{
+          border-right:none;
+      }
+      
+      .row-line td{
+          border-bottom:1px solid #d6d6d6;
+      }
+      
+      tbody tr:last-child td{
+          border-bottom:none;
+      }
+      
+      tbody tr:hover{
+          background:#fafafa;
+      }
+      
+      .bg-light{
+          background:#FFF5EE;
+      }
+      
+      .esp{
+          text-align:left;
+          width:14%;
+      }
+      
+      .nr{
+          width:13%;
+      }
+      
+      .sla{
+          width:4%;
+      }
+      
+      .compra{
+          width:5%;
+      }
+      
+      .ader-txt{
+          font-weight:800;
+          background:#f9f9f9;
+      }
+      
+      .mini{
+          width:100%;
+          font-size:14px;
+          line-height:1.2;
+      }
+      
+      .mh{
+          display:grid;
+          grid-template-columns:45% 55%;
+          font-weight:800;
+          color:#666;
+          padding-bottom:3px;
+          margin-bottom:3px;
+      }
+      
+      .mv{
+          display:grid;
+          grid-template-columns:45% 55%;
+          align-items:center;
+      }
+      
+      .nec{
+          color:#D32F2F;
+          font-weight:800;
+      }
+      
+      </style>"
+      
+      RETURN
+      _CSS &
+      
+      "<div class='table-wrap'>
+      
+      <table>
+      
+      <thead>
+      <tr>
+      <th>ESPECIALIDADE</th>
+      <th class='sla'>SLA</th>
+      <th class='compra'>COMPRA</th>
+      <th>15/" & _NomeMesRef & "</th>
+      <th>20/" & _NomeMesRef & "</th>
+      <th>01/" & _NomeMesSeg & "</th>
+      <th>15/" & _NomeMesSeg & "</th>
+      <th>FECHAMENTO</th>
+      </tr>
+      </thead>
+      
+      <tbody>" &
+      _GerarLinhas &
+      "</tbody>
+      
+      </table>
+      
+      </div>"
+    - Filtro_Selecao_Dinamica:
+      
+      VAR _FiltroCalendario = ISFILTERED('DIM_CALENDARIO'[MES])
+      VAR _FiltroFatoCompra = ISFILTERED('BASE_FATO_NECESSIDADE_COMPRA'[MES])
+      
+      RETURN
+      IF(
+          _FiltroCalendario || _FiltroFatoCompra,
+          "Exibir", 
+          "Ocultar"
+      )
+    - HTML_Consolidado_Metas:
+      
+      
+      VAR _DataSelecionada = MAX('DIM_CALENDARIO'[Date]) 
+      VAR _MesFiltro = MONTH(_DataSelecionada)
+      VAR _AnoFiltro = YEAR(_DataSelecionada)
+      
+      VAR _DataSeg = DATE(_AnoFiltro, _MesFiltro, 1)
+      VAR _DataRef = EDATE(_DataSeg, -1)
+      VAR _NomeMesRef = UPPER(FORMAT(_DataRef, "MMM"))
+      VAR _NomeMesSeg = UPPER(FORMAT(_DataSeg, "MMM"))
+      
+      VAR _D15A = DATE(YEAR(_DataRef), MONTH(_DataRef), 15)
+      VAR _D20A = DATE(YEAR(_DataRef), MONTH(_DataRef), 20)
+      VAR _D01S = DATE(YEAR(_DataSeg), MONTH(_DataSeg), 1)
+      VAR _D15S = DATE(YEAR(_DataSeg), MONTH(_DataSeg), 15)
+      
+      VAR _UltimoSnapshotBase =
+          CALCULATE(
+              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+              REMOVEFILTERS('DIM_CALENDARIO')
+          )
+      
+      VAR _TabelaBase = 
+          CALCULATETABLE(
+              ADDCOLUMNS(
+                  SUMMARIZE(
+                      BASE_FATO_NECESSIDADE_COMPRA,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                  ),
+      
+                  "@Prazo",
+                      LOOKUPVALUE(
+                          PRAZO_ANS[QT_DIAS_ANS],
+                          PRAZO_ANS[CD_ESPECIALIDADE],
+                          BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                      ),
+      
+                  "@SnapCompra",
+                      VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                      RETURN
+                          CALCULATE(
+                              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                              REMOVEFILTERS('DIM_CALENDARIO'),
+                              BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                              BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id
+                          ),
+      
+                  "@Compra",
+                      VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                      VAR _SnapCompra =
+                          CALCULATE(
+                              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                              REMOVEFILTERS('DIM_CALENDARIO'),
+                              BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                              BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id
+                          )
+                      RETURN
+                          CALCULATE(
+                              SUMX(
+                                  SUMMARIZE(
+                                      BASE_FATO_NECESSIDADE_COMPRA,
+                                      BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                                      "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                                  ),
+                                  [CompraFoto]
+                              ),
+                              REMOVEFILTERS('DIM_CALENDARIO'),
+                              BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                              BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                              BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapCompra
+                          ),
+      
+                  "@Disp",
+                      VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                      VAR _SnapDisp =
+                          CALCULATE(
+                              MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                              REMOVEFILTERS('DIM_CALENDARIO'),
+                              BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                              BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id
+                          )
+                      RETURN
+                          CALCULATE(
+                              SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                              REMOVEFILTERS('DIM_CALENDARIO'),
+                              BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                              BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                              BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _SnapDisp
+                          )
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg
+          )
+      
+      VAR _TabelaComAderencia = 
+          ADDCOLUMNS(
+              _TabelaBase,
+              "@MetaAcum", 
+                  VAR P = [@Prazo]
+                  VAR C = [@Compra]
+                  VAR V15A = ROUND(IF(P = 14, C * 0.5, 0), 0)
+                  VAR V20A = ROUND(IF(P IN {7,10}, C / 3, 0), 0)
+                  VAR V01S = ROUND(IF(P IN {7,10}, C / 3, 0), 0)
+                  VAR V15S = ROUND(IF(P = 14, C * 0.5, IF(P IN {7,10}, C / 3, 0)), 0)
+                  RETURN
+                      SWITCH(
+                          TRUE(),
+                          _UltimoSnapshotBase >= _D15S, V15A + V20A + V01S + V15S,
+                          _UltimoSnapshotBase >= _D01S, V15A + V20A + V01S,
+                          _UltimoSnapshotBase >= _D20A, V15A + V20A,
+                          _UltimoSnapshotBase >= _D15A, V15A,
+                          0
+                      )
+          )
+      
+      VAR _Valor_15A =
+          IF(
+              _UltimoSnapshotBase >= _D15A,
+              ROUND(SUMX(_TabelaBase, IF([@Prazo] = 14, [@Compra] * 0.5, 0)), 0)
+          )
+      
+      VAR _Valor_20A =
+          IF(
+              _UltimoSnapshotBase >= _D20A,
+              ROUND(SUMX(_TabelaBase, IF([@Prazo] IN {7,10}, [@Compra] / 3, 0)), 0)
+          )
+      
+      VAR _Valor_01S =
+          IF(
+              _UltimoSnapshotBase >= _D01S,
+              ROUND(SUMX(_TabelaBase, IF([@Prazo] IN {7,10}, [@Compra] / 3, 0)), 0)
+          )
+      
+      VAR _Valor_15S =
+          IF(
+              _UltimoSnapshotBase >= _D15S,
+              ROUND(
+                  SUMX(
+                      _TabelaBase,
+                      IF(
+                          [@Prazo] = 14,
+                          [@Compra] * 0.5,
+                          IF([@Prazo] IN {7,10}, [@Compra] / 3, 0)
+                      )
+                  ),
+                  0
+              )
+          )
+      
+      VAR _TotalDisp = SUMX(_TabelaBase, [@Disp])
+      VAR _VolEspecialidade = COUNTROWS(_TabelaBase)
+      
+      VAR _QtdMetaAtingida =
+          COUNTROWS(
+              FILTER(
+                  _TabelaComAderencia,
+                  [@MetaAcum] > 0
+                      && DIVIDE([@Disp], [@MetaAcum], 0) >= 0.9
+              )
+          )
+      
+      VAR _Acum_15A = _Valor_15A
+      VAR _Acum_20A = _Acum_15A + _Valor_20A
+      VAR _Acum_01S = _Acum_20A + _Valor_01S
+      VAR _Acum_15S = _Acum_01S + _Valor_15S
+      
+      VAR _UltimoAcumuladoValido =
+          SWITCH(
+              TRUE(),
+              _UltimoSnapshotBase >= _D15S, _Acum_15S,
+              _UltimoSnapshotBase >= _D01S, _Acum_01S,
+              _UltimoSnapshotBase >= _D20A, _Acum_20A,
+              _UltimoSnapshotBase >= _D15A, _Acum_15A,
+              BLANK()
+          )
+      
+      VAR _AderenciaGeral = DIVIDE(_TotalDisp, _UltimoAcumuladoValido, 0)
+      VAR _AderenciaEsp = DIVIDE(_QtdMetaAtingida, _VolEspecialidade, 0)
+      
+      VAR _Cell15A = IF(NOT ISBLANK(_Valor_15A), FORMAT(_Acum_15A, "#,0"), "—")
+      VAR _Cell20A = IF(NOT ISBLANK(_Valor_20A), FORMAT(_Acum_20A, "#,0"), "—")
+      VAR _Cell01S = IF(NOT ISBLANK(_Valor_01S), FORMAT(_Acum_01S, "#,0"), "—")
+      VAR _Cell15S = IF(NOT ISBLANK(_Valor_15S), FORMAT(_Acum_15S, "#,0"), "—")
+      
+      VAR _CSS = "<style>
+          .tab-cons { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', sans-serif; table-layout: fixed; background-color: white; }
+          .tab-cons .label-meta { background-color: #FF8C00 !important; color: #FFFFFF !important; width: 15%; border: 1px solid #e67e00; text-align: center !important; vertical-align: middle !important; font-size: 13px; font-weight: 800; }
+          .tab-cons th { background-color: #118DFF; color: white; padding: 12px 4px; font-size: 13px; border: 1px solid #0e7bdb; text-align: center; text-transform: uppercase; font-weight: 800; }
+          .th-orange { background-color: #FF8C00 !important; border: 1px solid #e67e00 !important; }
+          .tab-cons td { padding: 12px; text-align: center; border: 1px solid #ddd; font-size: 15px; font-weight: 600; color: #000000 !important; }
+          .bg-light { background-color: #FFF5EE !important; }
+          .col-data { width: 8.5%; }
+          .col-extra { width: 10%; }
+      </style>"
+      
+      RETURN
+      _CSS &
+      "<table class='tab-cons'>
+          <thead>
+              <tr>
+                  <th style='background-color: transparent; border: none; width: 15%;'></th>
+                  <th class='col-data th-orange'>15/" & _NomeMesRef & "</th>
+                  <th class='col-data th-orange'>20/" & _NomeMesRef & "</th>
+                  <th class='col-data th-orange'>01/" & _NomeMesSeg & "</th>
+                  <th class='col-data th-orange'>15/" & _NomeMesSeg & "</th>
+                  <th class='col-extra th-orange'>DISPONIBILIZADA</th>
+                  <th class='col-extra th-orange'>ADERÊNCIA</th>
+                  <th class='col-extra'>VOL. ESP.</th>
+                  <th class='col-extra'>ESPECIALIDADE ≥ 90%</th>
+                  <th class='col-extra'>ADERÊNCIA ESP.</th>
+              </tr>
+          </thead>
+          <tbody>
+              <tr>
+                  <td class='label-meta'>META ACUMULADA</td>
+                  <td class='bg-light'>" & _Cell15A & "</td>
+                  <td class='bg-light'>" & _Cell20A & "</td>
+                  <td class='bg-light'>" & _Cell01S & "</td>
+                  <td class='bg-light'>" & _Cell15S & "</td>
+                  <td class='bg-light'>" & FORMAT(_TotalDisp, "#,0") & "</td>
+                  <td class='bg-light'>" & FORMAT(_AderenciaGeral, "0.00%") & "</td>
+                  <td>" & _VolEspecialidade & "</td>
+                  <td>" & _QtdMetaAtingida & "</td>
+                  <td>" & FORMAT(_AderenciaEsp, "0.00%") & "</td>
+              </tr>
+          </tbody>
+      </table>"
+    - Teste_Disp_Snapshot:
+      
+      CALCULATE(
+          SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+          REMOVEFILTERS(DIM_CALENDARIO),
+          BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = DATE(2026, 3, 20)
+      )
+    - Teste_Min_Snapshot:
+      
+      CALCULATE(
+          MIN(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+          REMOVEFILTERS(DIM_CALENDARIO)
+      )
+    - HTML_Total_Especialidades_90_Tele:
+      
+      
+      VAR _DataSelecionada = MAX('DIM_CALENDARIO'[Date]) 
+      VAR _MesFiltro = MONTH(_DataSelecionada)
+      VAR _AnoFiltro = YEAR(_DataSelecionada)
+      
+      VAR _DataSeg = DATE(_AnoFiltro, _MesFiltro, 1)
+      VAR _DataRef = EDATE(_DataSeg, -1)
+      
+      VAR _NomeMesRef = UPPER(FORMAT(_DataRef, "MMM"))
+      VAR _NomeMesSeg = UPPER(FORMAT(_DataSeg, "MMM"))
+      
+      VAR _D15A = DATE(YEAR(_DataRef), MONTH(_DataRef), 15)
+      VAR _D20A = DATE(YEAR(_DataRef), MONTH(_DataRef), 20)
+      VAR _D01S = DATE(YEAR(_DataSeg), MONTH(_DataSeg), 1)
+      VAR _D15S = DATE(YEAR(_DataSeg), MONTH(_DataSeg), 15)
+      VAR _D01ProxMes = EDATE(_DataSeg, 1)
+      
+      VAR _Hoje = TODAY()
+      
+      VAR _Corte15A = IF(_Hoje >= _D15A, _D15A, _Hoje)
+      VAR _Corte20A = IF(_Hoje >= _D20A, _D20A, _Hoje)
+      VAR _Corte01S = IF(_Hoje >= _D01S, _D01S, _Hoje)
+      VAR _Corte15S = IF(_Hoje >= _D15S, _D15S, _Hoje)
+      VAR _CorteFechamento = IF(_Hoje >= _D01ProxMes, _D01ProxMes, _Hoje)
+      
+      VAR _TabelaBase =
+          CALCULATETABLE(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+              ),
+              KEEPFILTERS(BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA"),
+              ALL('DIM_CALENDARIO'),
+              BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg
+          )
+      
+      VAR _CalculaTotal =
+          ADDCOLUMNS(
+              _TabelaBase,
+              "@Prazo",
+                  LOOKUPVALUE(
+                      PRAZO_ANS[QT_DIAS_ANS],
+                      PRAZO_ANS[CD_ESPECIALIDADE],
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+                  )
+          )
+      
+      VAR _Total15A =
+          SUMX(
+              _CalculaTotal,
+              VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+              VAR _P = [@Prazo]
+      
+              VAR _Snap =
+                  CALCULATE(
+                      MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte15A
+                  )
+      
+              VAR _Compra =
+                  CALCULATE(
+                      SUMX(
+                          SUMMARIZE(
+                              BASE_FATO_NECESSIDADE_COMPRA,
+                              BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                              "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                          ),
+                          [CompraFoto]
+                      ),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Disp =
+                  CALCULATE(
+                      SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Meta = IF(_P = 14, _Compra * 0.5)
+      
+              RETURN
+                  IF(
+                      _P = 14 &&
+                      NOT ISBLANK(_Snap) &&
+                      DIVIDE(_Disp, _Meta, 0) >= 0.9,
+                      1,
+                      0
+                  )
+          )
+      
+      VAR _Total20A =
+          SUMX(
+              _CalculaTotal,
+              VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+              VAR _P = [@Prazo]
+      
+              VAR _Snap =
+                  CALCULATE(
+                      MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte20A
+                  )
+      
+              VAR _Compra =
+                  CALCULATE(
+                      SUMX(
+                          SUMMARIZE(
+                              BASE_FATO_NECESSIDADE_COMPRA,
+                              BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                              "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                          ),
+                          [CompraFoto]
+                      ),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Disp =
+                  CALCULATE(
+                      SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Meta = IF(_P IN {7,10}, _Compra / 3)
+      
+              RETURN
+                  IF(
+                      _P IN {7,10} &&
+                      NOT ISBLANK(_Snap) &&
+                      DIVIDE(_Disp, _Meta, 0) >= 0.9,
+                      1,
+                      0
+                  )
+          )
+      
+      VAR _Total01S =
+          SUMX(
+              _CalculaTotal,
+              VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+              VAR _P = [@Prazo]
+      
+              VAR _Snap =
+                  CALCULATE(
+                      MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte01S
+                  )
+      
+              VAR _Compra =
+                  CALCULATE(
+                      SUMX(
+                          SUMMARIZE(
+                              BASE_FATO_NECESSIDADE_COMPRA,
+                              BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                              "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                          ),
+                          [CompraFoto]
+                      ),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Disp =
+                  CALCULATE(
+                      SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Meta = IF(_P IN {7,10}, _Compra * 0.6666666667)
+      
+              RETURN
+                  IF(
+                      _P IN {7,10} &&
+                      NOT ISBLANK(_Snap) &&
+                      DIVIDE(_Disp, _Meta, 0) >= 0.9,
+                      1,
+                      0
+                  )
+          )
+      
+      VAR _Total15S =
+          SUMX(
+              _CalculaTotal,
+              VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+      
+              VAR _Snap =
+                  CALCULATE(
+                      MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _Corte15S
+                  )
+      
+              VAR _Compra =
+                  CALCULATE(
+                      SUMX(
+                          SUMMARIZE(
+                              BASE_FATO_NECESSIDADE_COMPRA,
+                              BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                              "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                          ),
+                          [CompraFoto]
+                      ),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Disp =
+                  CALCULATE(
+                      SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              RETURN
+                  IF(
+                      NOT ISBLANK(_Snap) &&
+                      DIVIDE(_Disp, _Compra, 0) >= 0.9,
+                      1,
+                      0
+                  )
+          )
+      
+      VAR _TotalFechamento =
+          SUMX(
+              _CalculaTotal,
+              VAR _Id = BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE]
+      
+              VAR _Snap =
+                  CALCULATE(
+                      MAX(BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] <= _CorteFechamento
+                  )
+      
+              VAR _Compra =
+                  CALCULATE(
+                      SUMX(
+                          SUMMARIZE(
+                              BASE_FATO_NECESSIDADE_COMPRA,
+                              BASE_FATO_NECESSIDADE_COMPRA[CHAVE],
+                              "CompraFoto", MAX(BASE_FATO_NECESSIDADE_COMPRA[COMPRA])
+                          ),
+                          [CompraFoto]
+                      ),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              VAR _Disp =
+                  CALCULATE(
+                      SUM(BASE_FATO_NECESSIDADE_COMPRA[DISPONIBILIZADAS]),
+                      REMOVEFILTERS('DIM_CALENDARIO'),
+                      BASE_FATO_NECESSIDADE_COMPRA[TIPO_COMPRA] = "COMPRA TELEMEDICINA",
+                      BASE_FATO_NECESSIDADE_COMPRA[MES] = _DataSeg,
+                      BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] = _Id,
+                      BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] = _Snap
+                  )
+      
+              RETURN
+                  IF(
+                      NOT ISBLANK(_Snap) &&
+                      DIVIDE(_Disp, _Compra, 0) >= 0.9,
+                      1,
+                      0
+                  )
+          )
+      
+      VAR _CSS =
+      "
+      <style>
+      
+      .total-esp-wrap{
+          width:100%;
+          font-family:Segoe UI;
+          background:transparent;
+      }
+      
+      .total-esp-table{
+          width:100%;
+          border-collapse:separate;
+          border-spacing:0;
+          table-layout:fixed;
+      }
+      
+      .total-esp-table th{
+          background:#118DFF;
+          color:white;
+          padding:10px;
+          font-size:14px;
+          font-weight:800;
+          text-align:center;
+          border-right:1px solid rgba(255,255,255,0.25);
+      }
+      
+      .total-esp-table td{
+          color:#000;
+          padding:12px;
+          font-size:18px;
+          font-weight:500;
+          text-align:center;
+          border-right:1px solid #ececec;
+          border-bottom:2px solid #118DFF;
+      }
+      
+      .total-esp-table th:last-child,
+      .total-esp-table td:last-child{
+          border-right:none;
+      }
+      
+      .label-laranja{
+          background:#118DFF !important;
+          color:white !important;
+          font-size:13px !important;
+          font-weight:900 !important;
+          text-align:center !important;
+          width:220px;
+      }
+      
+      </style>
+      "
+      
+      RETURN
+      _CSS &
+      "
+      <div class='total-esp-wrap'>
+      
+      <table class='total-esp-table'>
+      
+          <thead>
+              <tr>
+                  <th style='background:transparent;border:none;'></th>
+                  <th>15/" & _NomeMesRef & "</th>
+                  <th>20/" & _NomeMesRef & "</th>
+                  <th>01/" & _NomeMesSeg & "</th>
+                  <th>15/" & _NomeMesSeg & "</th>
+                  <th>FECHAMENTO</th>
+              </tr>
+          </thead>
+      
+          <tbody>
+              <tr>
+                  <td class='label-laranja'>
+                      ESPECIALIDADES ≥ 90%
+                  </td>
+      
+                  <td>" & _Total15A & "</td>
+                  <td>" & _Total20A & "</td>
+                  <td>" & _Total01S & "</td>
+                  <td>" & _Total15S & "</td>
+                  <td>" & _TotalFechamento & "</td>
+              </tr>
+          </tbody>
+      
+      </table>
+      
+      </div>
+      "
+    - _Filtro Ofensor:
+      
+      VAR PercEntrega =
+          DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0)
+      
+      VAR PercConsumo =
+          DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+      
+      VAR DiasZerados =
+          SUM(BASE_FATO_NECESSIDADE_COMPRA[DIAS_ZERADOS])
+      
+      RETURN
+      IF(
+          SELECTEDVALUE(BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA]) = "N"
+              && PercEntrega < 0.9
+              && PercConsumo >= 0.8
+              && DiasZerados >= 1,
+          1
+      )
+    - __Qt Ofensores:
+      
+      /* Medida Criada 19.05 por Rafael Fernandes */
+      VAR TabelaBase =
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                  DIM_CALENDARIO[MES],
+                  DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                  DIM_CIDADE[EMPRESA],
+                  DIM_CIDADE[SUB_REGIAO],
+                  DIM_CIDADE[NM_CIDADE],
+                  DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+                  "D_ZERADO", SUM(BASE_FATO_NECESSIDADE_COMPRA[DIAS_ZERADOS]),
+                  "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                  "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" 
+              && [ENTREGA] < 0.9 && [CONSUMO] >= 0.8
+              && [D_ZERADO] >= 1
+          )
+      RETURN
+      COUNTROWS(TabelaBase)
+              
+      
+    - __Contagem Sem Regras:
+      
+      VAR TabelaBase =
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                  DIM_CALENDARIO[MES],
+                  DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                  DIM_CIDADE[EMPRESA],
+                  DIM_CIDADE[SUB_REGIAO],
+                  DIM_CIDADE[NM_CIDADE],
+                  DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+      
+                  "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                  "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" 
+              
+              /*&& [ENTREGA] < 0.9 && [CONSUMO] >= 0.8*/
+          )
+      RETURN
+      COUNTROWS(TabelaBase)
+    - __% Ofensores:
+      DIVIDE( [__Qt Ofensores] , [__Qt Local-Especialidade] )
+    - __Qt Aderentes:
+      
+      /* Medida Criada 19.05 por Rafael Fernandes */
+      VAR TabelaBase =
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                  DIM_CALENDARIO[MES],
+                  DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                  DIM_CIDADE[EMPRESA],
+                  DIM_CIDADE[SUB_REGIAO],
+                  DIM_CIDADE[NM_CIDADE],
+                  DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+      
+                  "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                  "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" 
+              && [ENTREGA] >= 0.9 
+          )
+      RETURN
+      COUNTROWS(TabelaBase)
+    - __Qt Local-Especialidade:
+      
+      /* Medida Criada 19.05 por Rafael Fernandes */
+      VAR TabelaBase =
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                  DIM_CALENDARIO[MES],
+                  DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                  DIM_CIDADE[EMPRESA],
+                  DIM_CIDADE[SUB_REGIAO],
+                  DIM_CIDADE[NM_CIDADE],
+                  DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+      
+                  "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                  "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" 
+          )
+      RETURN
+      COUNTROWS(TabelaBase)
+    - __Qt Não Aderentes:
+      
+      /* Medida Criada 19.05 por Rafael Fernandes */
+      VAR TabelaBase =
+          FILTER(
+              SUMMARIZE(
+                  BASE_FATO_NECESSIDADE_COMPRA,
+                  BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                  DIM_CALENDARIO[MES],
+                  DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                  DIM_CIDADE[EMPRESA],
+                  DIM_CIDADE[SUB_REGIAO],
+                  DIM_CIDADE[NM_CIDADE],
+                  DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+      
+                  "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                  "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" 
+              && [ENTREGA] < 0.9 /*&& NOT ISBLANK([ENTREGA])*/
+          )
+      RETURN
+      COUNTROWS(TabelaBase)
+    - __Qt Compra Ofensores:
+      
+      /* Medida Criada 19.05 por Rafael Fernandes */
+      VAR TabelaBase =
+              FILTER(
+                  SUMMARIZE(
+                      BASE_FATO_NECESSIDADE_COMPRA,
+                      BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                      DIM_CALENDARIO[MES],
+                      DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                      DIM_CIDADE[EMPRESA],
+                      DIM_CIDADE[SUB_REGIAO],
+                      DIM_CIDADE[NM_CIDADE],
+                      DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+                      DIM_NECESSIDADE_COMPRA[FL_STATUS_ATIVO],
+                      "COMPRA" , [01_SUM_COMPRA],
+                      "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                      "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" && 
+              [ENTREGA] < 0.9 && [CONSUMO] >= 0.8
+      )
+      RETURN
+          SUMX(TabelaBase, [COMPRA])
+      
+      
+      
+    - __Qt Disp Ofensores:
+      
+      /* Medida Criada 19.05 por Rafael Fernandes */
+      VAR TabelaBase =
+              FILTER(
+                  SUMMARIZE(
+                      BASE_FATO_NECESSIDADE_COMPRA,
+                      BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA],
+                      DIM_CALENDARIO[MES],
+                      DIM_NECESSIDADE_COMPRA[DIRETORIA],
+                      DIM_CIDADE[EMPRESA],
+                      DIM_CIDADE[SUB_REGIAO],
+                      DIM_CIDADE[NM_CIDADE],
+                      DIM_ESPECIALIDADE[NM_ESPECIALIDADE],
+                      DIM_NECESSIDADE_COMPRA[FL_STATUS_ATIVO],
+                      "DISP" , [02_SUM_DISP],
+                      "ENTREGA", DIVIDE([02_SUM_DISP], [01_SUM_COMPRA], 0),
+                      "CONSUMO", DIVIDE([03_SUM_MARCADAS], [02_SUM_DISP], 0)
+              ),
+              BASE_FATO_NECESSIDADE_COMPRA[FL_MISTA] = "N" && 
+              [ENTREGA] < 0.9 && [CONSUMO] >= 0.8
+      )
+      RETURN
+          SUMX(TabelaBase, [DISP])
+      
+      
+      
+    - % Entrega Forecast Ofensores:
+      
+      DIVIDE( [__Qt Disp Ofensores] , [__Qt Compra Ofensores] )
+    - Medida:
+      
+    - Qt Dias Zerados:
+      SUM(BASE_FATO_NECESSIDADE_COMPRA[DIAS_ZERADOS])
+----------------------------------------
+Tabela: DIM_CIDADE
+  Colunas:
+    - CD_FILIAL [string]
+    - NM_FILIAL [string]
+    - CD_UF [string]
+    - NM_CIDADE [string]
+    - EMPRESA [string]
+    - SUB_REGIAO [string]
+    - CHAVE_LOCAL [string]
+    - CD_LOCALIDADE_CIDADE [string]
+----------------------------------------
+Tabela: DIM_ESPECIALIDADE
+  Colunas:
+    - CD_ESPECIALIDADE [string]
+    - NM_ESPECIALIDADE [string]
+    - DEFINICAO_ESPECIALIDADE [string]
+----------------------------------------
+Tabela: DT_ATUALIZAÇÃO
+  Colunas:
+    - DT_ATUALIZAÇÃO [dateTime]
+----------------------------------------
+Tabela: PRAZO_ANS
+  Colunas:
+    - CD_ESPECIALIDADE [string]
+    - DS_ESPECIALIDADE [string]
+    - QT_DIAS_ANS [double]
+----------------------------------------
+Tabela: TAB_ORDEM
+  Colunas:
+    - Opção [string]
+    - Ordem_ID [int64]
+----------------------------------------
+Tabela: BASE_FATO_NECESSIDADE_COMPRA
+  Colunas:
+    - CHAVE [string]
+    - CHAVE_LOCAL [string]
+    - MES [dateTime]
+    - DT_SNAPSHOT [dateTime]
+    - CD_FILIAL [string]
+    - CD_ESPECIALIDADE [string]
+    - CD_LOCALIDADE_CIDADE [string]
+    - TIPO_COMPRA [string]
+    - GRUPO_ASSERTIVIDADE_MODELO [string]
+    - COMPRA [double]
+    - COMPRA_SHARE [double]
+    - DISPONIBILIZADAS [double]
+    - MARCADAS [double]
+    - TIPO_COMPRA_AJUSTADO [string] (Calculada)
+    - CHAVE_SNAPSHOT [string] (Calculada)
+    - FL_MISTA [string] (Calculada)
+    - DIAS_ZERADOS [double]
+----------------------------------------
+Tabela: DIM_MISTAS
+  Colunas:
+    - CD_LOCALIDADE [string]
+    - COD_FILIAL [string]
+    - CD_ESPECIALIDADE [string]
+    - DS_ESPECIALIDADE [string]
+    - NM_CIDADE [string]
+    - UF [string]
+    - MES_ANO [string]
+    - MES_FORMATADO [string] (Calculada)
+----------------------------------------
+Tabela: Filtro_Data_HTML
+  Colunas:
+    - Filtro [string]
+    - Ordem [int64]
+  Medidas DAX (Regras de Negócio):
+    - Filtro_HTML_Selecionado:
+      
+      SELECTEDVALUE(
+          Filtro_Data_HTML[Filtro],
+          "Todas"
+      )
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+DIM_CALENDARIO[Date] ---> LocalDateTable_4a7fec79-26ea-47a3-8da4-77197fbefdad[Date]
+DT_ATUALIZAÇÃO[DT_ATUALIZAÇÃO] ---> LocalDateTable_261f29bd-fa76-4087-90f8-d6aadfa57823[Date]
+BASE_FATO_NECESSIDADE_COMPRA[DT_SNAPSHOT] ---> LocalDateTable_b1316893-7455-46d2-b05c-605af9f8f33f[Date]
+BASE_FATO_NECESSIDADE_COMPRA[CHAVE_LOCAL] ---> DIM_CIDADE[CHAVE_LOCAL]
+BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] ---> PRAZO_ANS[CD_ESPECIALIDADE]
+BASE_FATO_NECESSIDADE_COMPRA[CD_ESPECIALIDADE] ---> DIM_ESPECIALIDADE[CD_ESPECIALIDADE]
+BASE_FATO_NECESSIDADE_COMPRA[MES] ---> DIM_CALENDARIO[Date]
+BASE_FATO_NECESSIDADE_COMPRA[CHAVE] ---> DIM_NECESSIDADE_COMPRA[CHAVE]
+DIM_MISTAS[CD_ESPECIALIDADE] ---> PRAZO_ANS[CD_ESPECIALIDADE]
+DIM_MISTAS[CD_ESPECIALIDADE] ---> DIM_ESPECIALIDADE[CD_ESPECIALIDADE]

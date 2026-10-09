@@ -1,0 +1,213 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatório de Cancelamento v2.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: fRemarcacao
+  Colunas:
+    - CD_PRESTADOR_JURIDICO [string]
+    - CD_PRESTADOR_FISICO [string]
+    - CD_ESPECIALIDADE [string]
+    - CD_EMPRESA_CONVENIADA [string]
+    - CD_MOTIVO_CANCELAMENTO [double]
+    - QT_CANCELADO [int64]
+    - QT_CANC_ATE_3H [int64]
+    - QT_REAGENDADO [int64]
+    - QT_REAGEND_0_15_DIAS [int64]
+    - QT_REAGEND_15_30_DIAS [int64]
+    - QT_REAGEND_30_45_DIAS [int64]
+    - QT_REAGEND_45_60_DIAS [int64]
+    - QT_REAGEND_ACIMA_60_DIAS [int64]
+    - QT_FALTA_MED [double]
+    - QT_FALTA_PAC [double]
+    - QT_REM_MED [double]
+    - QT_REM_PAC [double]
+    - QT_REM_ADM [double]
+    - DT_CONSULTA [dateTime]
+    - QT_CONSULTA [int64]
+    - QT_AGENDADO [int64]
+    - QT_EFETIVADO [int64]
+    - QT_ENCAIXE [int64]
+    - QT_ENCAIXE_EFET [int64]
+    - QT_RETORNO [int64]
+    - QT_RETORNO_EFET [int64]
+    - QT_CANCELADO1 [int64]
+    - CD_CLASSIFICACAO [string]
+    - MES_ANO [double]
+----------------------------------------
+Tabela: #MEDIDAS
+  Medidas DAX (Regras de Negócio):
+    - Qt Falta Medico:
+      SUM(fRemarcacao[QT_FALTA_MED])
+    - Qt Falta Paciente:
+      SUM(fRemarcacao[QT_FALTA_PAC])
+    - Qt Rem Paciente:
+      SUM(fRemarcacao[QT_REM_PAC])
+    - Qt Rem Adm:
+      SUM(fRemarcacao[QT_REM_ADM])
+    - Qt Rem Medico:
+      SUM(fRemarcacao[QT_REM_MED])
+    - Qt Efetivadas:
+      SUM(fRemarcacao[QT_EFETIVADO])
+    - Qt Canceladas:
+      [Qt Falta Medico] + [Qt Falta Paciente] + [Qt Rem Adm] + [Qt Rem Medico]
+    - Qt Total Consultas:
+      [Qt Efetivadas] + [Qt Canceladas]
+    - % Falta Medico:
+      DIVIDE( [Qt Falta Medico] , [Qt Total Consultas] ) 
+    - % Falta Paciente:
+      DIVIDE( [Qt Falta Paciente] , [Qt Total Consultas] ) 
+    - % Remarcação Adm:
+      DIVIDE( [Qt Rem Adm] , [Qt Total Consultas] ) 
+    - % Remarcação Medico:
+      DIVIDE( [Qt Rem Medico] , [Qt Total Consultas] + [Qt Rem Medico] ) 
+    - % Remarcação Paciente:
+      DIVIDE( [Qt Rem Paciente] , [Qt Total Consultas] ) 
+    - Total Reagendamento:
+      SUM( fRemarcacao[QT_REAGENDADO] )
+    - Qt Reagend 0_15:
+      SUM( fRemarcacao[QT_REAGEND_0_15_DIAS] )
+    - Qt Reagend 15_30:
+      SUM( fRemarcacao[QT_REAGEND_15_30_DIAS] )
+    - Qt Reagend 30_45:
+      SUM( fRemarcacao[QT_REAGEND_30_45_DIAS] )
+    - Qt Reagend 45_60:
+      SUM( fRemarcacao[QT_REAGEND_45_60_DIAS] )
+    - Total Cancelamentos:
+      SUM( fRemarcacao[QT_CANCELADO1] )
+    - % Reagend 0_15:
+      DIVIDE( [Qt Reagend 0_15] , [Total Cancelamentos] )
+    - % Reagend 15_30:
+      DIVIDE( [Qt Reagend 15_30] , [Total Cancelamentos] )
+    - % Reagend 30_45:
+      DIVIDE( [Qt Reagend 30_45] , [Total Cancelamentos] )
+    - % Reagend 45_60:
+      DIVIDE( [Qt Reagend 45_60] , [Total Cancelamentos] )
+    - % Reagendamentos:
+      DIVIDE( [Total Reagendamento] , [Total Cancelamentos] )
+    - Qt Reagend Acima 60:
+      SUM( fRemarcacao[QT_REAGEND_ACIMA_60_DIAS] )
+    - % Reagend Acima 60:
+      DIVIDE( [Qt Reagend Acima 60] , [Total Cancelamentos] )
+    - % Reagend até 60 dias:
+      
+      VAR QtTotal = [Qt Reagend 0_15] + [Qt Reagend 15_30] + [Qt Reagend 30_45] + [Qt Reagend 45_60]
+      VAR TotalCancelamento = [Total Cancelamentos]
+      RETURN
+      DIVIDE(  QtTotal , [Total Cancelamentos] )
+    - Qt Registros:
+      COUNTROWS( fRemarcacao )
+    - Qt Canc. < 3H:
+      
+          SUM(fRemarcacao[QT_CANC_ATE_3H])
+    - Top10Motivos:
+      
+      VAR Top10Motivos = 
+          CALCULATETABLE(
+              VALUES(dMotivos[DS_MOTIVO_CANCELAMENTO]),
+              TOPN(
+                  10,
+                  ALL(dMotivos[DS_MOTIVO_CANCELAMENTO]),
+                  CALCULATE(SUM(fRemarcacao[QT_CANCELADO1])),
+                  DESC
+              )
+          )
+      RETURN
+          CALCULATE(
+              SUM(fRemarcacao[QT_CANCELADO1]),
+              KEEPFILTERS(dMotivos[DS_MOTIVO_CANCELAMENTO] IN Top10Motivos)
+          )
+      
+    - Qt Emp. Conveniada:
+      DISTINCTCOUNT(fRemarcacao[CD_EMPRESA_CONVENIADA])
+----------------------------------------
+Tabela: dCalendario
+  Colunas:
+    - Date [dateTime]
+    - Dia [int64]
+    - Mes [int64]
+    - Ano [int64]
+    - DiaSemana [int64]
+    - SemanaAno [int64]
+    - SemanaMes [int64]
+    - MesAno [string]
+    - AnoMes [string]
+    - ClassifAno [int64]
+    - DiaSemanaNome [string]
+    - Quartil [int64]
+    - FimSemana [int64]
+    - DiaUtil [int64]
+    - Trimestre [int64]
+    - MesExtenso [string]
+----------------------------------------
+Tabela: dEspecialidade
+  Colunas:
+    - CD_ESPECIALIDADE [string]
+    - DS_ESPECIALIDADE [string]
+----------------------------------------
+Tabela: dMotivos
+  Colunas:
+    - CD_MOTIVO_CANCELAMENTO [int64]
+    - DS_MOTIVO_CANCELAMENTO [string]
+    - CD_GRUPO [double]
+    - DS_GRUPO [string]
+----------------------------------------
+Tabela: dClassificacao
+  Colunas:
+    - CD_CLASSIFICACAO [int64]
+    - DS_CLASSIFICACAO [string]
+----------------------------------------
+Tabela: dEmpresaConv
+  Colunas:
+    - CD_EMPRESA_CONVENIADA [string]
+    - NM_EMPRESA_COVENIADA [string]
+----------------------------------------
+Tabela: dPrestador
+  Colunas:
+    - CD_PRESTADOR_FISICO [string]
+    - CD_PESSOA [string]
+    - NM_PRESTADOR [string]
+----------------------------------------
+Tabela: dCidade
+  Colunas:
+    - COD_UNIDADE [string]
+    - NM_RAZAO SOCIAL [string]
+    - NM_FANTASIA [string]
+    - NM_SITE [string]
+    - NM_CIDADE [string]
+    - COD_FILIAL [string]
+    - NM_FILIAL [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - LOCALIZAÇÃO [string]
+    - TIPO [string]
+    - REGIONAL [string]
+    - CD_LOCALIDADE [string]
+    - REGIAO BRASIL [string]
+    - COD_EMPRESA [double]
+    - CD_EMP_UNIF [double]
+    - SUB REGIAO [string]
+    - CD_LOCALIDADE_POLO [string]
+    - CD_CIDADE_IBGE [double]
+    - ENDERECO [string]
+    - RUA [string]
+    - NUMERO [double]
+    - BAIRRO [string]
+    - TIPO_LOGRADOURO [string]
+    - CEP [string]
+    - LATITUDE [string]
+    - LONGITUDE [string]
+    - CD_LOCALIDADE_CIDADE [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+fRemarcacao[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+fRemarcacao[CD_EMPRESA_CONVENIADA] ---> dEmpresaConv[CD_EMPRESA_CONVENIADA]
+fRemarcacao[CD_MOTIVO_CANCELAMENTO] ---> dMotivos[CD_MOTIVO_CANCELAMENTO]
+fRemarcacao[CD_CLASSIFICACAO] ---> dClassificacao[CD_CLASSIFICACAO]
+fRemarcacao[CD_PRESTADOR_FISICO] ---> dPrestador[CD_PRESTADOR_FISICO]
+fRemarcacao[DT_CONSULTA] ---> dCalendario[Date]
+fRemarcacao[CD_PRESTADOR_JURIDICO] ---> dCidade[COD_UNIDADE]

@@ -1,0 +1,337 @@
+============================================================
+MAPEAMENTO DE REGRAS: Painel Médicos Hapclinicas V2.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: base_PainelMedicos
+  Colunas:
+    - DATA [dateTime]
+    - QTD_CONSULTA [int64]
+    - QTD_EFETIVADOS [int64]
+    - FALT_MED [int64]
+    - FAL_PAC [int64]
+    - REM_MED [int64]
+    - REM_ADM [int64]
+    - REM_PAC [int64]
+    - COD_UNIDADE [int64]
+    - NM_FANTASIA [string]
+    - NM_SITE [string]
+    - NM_CIDADE [string]
+    - COD_FILIAL [int64]
+    - NM_FILIAL [string]
+    - UF [string]
+    - EMPRESA [string]
+    - CD_ESPECIALIDADE [string]
+    - QTD HORA ATRASO [double]
+    - QTD USUARIOS [int64]
+    - QTD USUARIOS > 30MIN [int64]
+    - HORA EFETIVADA [double]
+    - CONSULTA EFETIVADA [int64]
+    - RETORNO EFETIVADO [int64]
+    - META ICH [double]
+    - PARAMETRIZAÇÃO [int64]
+    - QTD ATRASOS [int64]
+    - QTE_DISPONIBILIZADA [int64]
+    - TIPO [string]
+    - DISTRITO [string]
+    - LOCALIZAÇÃO [string]
+    - QTD_CANCELADOS [string]
+    - ANO_MES [string]
+    - NM_ESPECIALIDADE [string]
+    - NM_MEDICO [string]
+    - APENAS [string]
+    - CAPTADO [string]
+    - RESPONSAVEL [string]
+    - REGIONAL [string]
+    - POLO [string]
+    - _CD_PRESTADOR [string]
+    - MES_ATUAL [string] (Calculada)
+    - CONSULTAS_DGE [int64]
+    - HORAS_DGE [double]
+    - SUB REGIAO [string]
+    - CD_LOCALIDADE [string]
+    - REGIAO BRASIL [string]
+    - TIPO_REDE [string]
+    - NR_TIPO_SERVICO_SAUDE [string]
+----------------------------------------
+Tabela: #Medidas
+  Medidas DAX (Regras de Negócio):
+    - Consulta Efet.:
+      
+      CALCULATE(
+          SUM(base_PainelMedicos[CONSULTA EFETIVADA]),
+          FILTER(
+              base_PainelMedicos,
+              base_PainelMedicos[HORA EFETIVADA] <> 0 
+              )
+          )
+    - Retorno Efet.:
+      
+      CALCULATE(
+          SUM(base_PainelMedicos[RETORNO EFETIVADO]),
+          FILTER(
+              base_PainelMedicos,
+              base_PainelMedicos[HORA EFETIVADA] <> 0
+              )
+          )
+    - Total Atend.:
+      
+      SUM(base_PainelMedicos[CONSULTAS_DGE])
+      
+      //[Consulta Efet.] + [Retorno Efet.]
+    - Horas Efet.:
+      
+      /*CALCULATE(
+          SUM(base_PainelMedicos[HORA EFETIVADA]),
+          FILTER(base_PainelMedicos, base_PainelMedicos[HORA EFETIVADA] <> 0 && base_PainelMedicos[HORA EFETIVADA] > 0))*/
+      
+      SUM(base_PainelMedicos[HORAS_DGE])
+    - Produtividade:
+      DIVIDE([Total Atend.] , [Horas Efet.], 0)
+    - Falta Médica:
+      SUM(base_PainelMedicos[FALT_MED])
+    - Falta Paciente:
+      SUM(base_PainelMedicos[FAL_PAC])
+    - Total Consultas:
+      [Consultas Efetivadas] + [Consultas Canceladas]
+    - Rem. Adm:
+      SUM(base_PainelMedicos[REM_ADM])
+    - Rem. Médica:
+      SUM(base_PainelMedicos[REM_MED])
+    - Rem. Paciente:
+      SUM(base_PainelMedicos[REM_PAC])
+    - % Cons. Efetivada:
+      DIVIDE( [Consultas Efetivadas] , [Total Consultas], 0)
+    - Consultas Canceladas:
+      [Falta Médica] + [Falta Paciente] + [Rem. Adm] + [Rem. Médica]
+    - % Cons. Canceladas:
+      DIVIDE([Consultas Canceladas] , [Total Consultas], 0)
+    - % Falta Paciente:
+      
+      COALESCE(
+          DIVIDE([Falta Paciente] , [Total Consultas] , 0)
+          ,0)
+    - % Falta Médica:
+      
+      
+      COALESCE(
+          DIVIDE([Falta Médica] , [Total Consultas],0)
+          ,0)
+    - % Remarcação ADM:
+      DIVIDE([Rem. Adm] , [Total Consultas], 0)
+    - % Remarcação Médica:
+      DIVIDE([Rem. Médica] , [Total Consultas], 0)
+    - % Remarcação Paciente:
+      DIVIDE([Rem. Paciente] , [Total Consultas] , 0)
+    - Qtde Usuarios:
+      SUM(base_PainelMedicos[QTD USUARIOS])
+    - Qtde Usuarios > 30M:
+      Sum(base_PainelMedicos[QTD USUARIOS > 30MIN])
+    - % PCTE > 30 Min:
+      
+      COALESCE(
+          DIVIDE([Qtde Usuarios > 30M],[Qtde Usuarios],0)
+          ,0)
+    - Qtde Médicos:
+      DISTINCTCOUNT(base_PainelMedicos[NM_MEDICO])
+    - Média Atrasos Médico:
+      DIVIDE([Horas de Atraso] , [Qtde Médicos], 0)
+    - Horas de Atraso:
+      SUM(base_PainelMedicos[QTD HORA ATRASO])
+    - Paramet. Atual:
+      MAX(base_PainelMedicos[PARAMETRIZAÇÃO])
+    - Meta ICH:
+      MAX(base_PainelMedicos[META ICH])
+    - Qtde Atrasos:
+      CALCULATE(COUNTROWS(base_PainelMedicos),FILTER(base_PainelMedicos, [Horas de Atraso] > 0 ))
+    - Hora de Atraso HHMMSS:
+      
+      VAR vHorasDecimal = [Horas de Atraso]
+      VAR vHoras = INT(vHorasDecimal)
+      VAR vMinutosDecimal = 60 * (vHorasDecimal - vHoras)
+      VAR vMinutos = INT(vMinutosDecimal)
+      VAR vSegundos = ROUND(60*(vMinutosDecimal - vMinutos), 0)
+      VAR vHH = IF(LEN(vHoras) = 1, "0" & vHoras, vHoras)
+      VAR vMM = IF(LEN(vMinutos) = 1 , "0" & vMinutos, vMinutos)
+      VAR vSS = IF(LEN(vSegundos) = 1, "0" & vSegundos, vSegundos)
+      VAR vResultado = IF(vHH & ":" & vMM & ":" & vSS = "::" , BLANK(),vHH & ":" & vMM & ":" & vSS)
+      RETURN
+      vResultado
+    - Qtde Atraso por Faixa:
+      
+          VAR Minimo = SELECTEDVALUE('Faixa Atraso'[MIN])
+          VAR Maximo = SELECTEDVALUE('Faixa Atraso'[MAX])
+      RETURN
+          CALCULATE([Qtde Atrasos],FILTER(base_PainelMedicos,base_PainelMedicos[QTD HORA ATRASO] >= Minimo && base_PainelMedicos[QTD HORA ATRASO] < Maximo))
+    - Qtde Registros:
+      COUNTROWS(base_PainelMedicos)
+    - Formato Cor Produt.:
+      
+          IF([Produtividade] >= [Meta ICH] , "#2196F3",  "#EEEEEE" )
+    - Qtde Disponibilizadas:
+      SUM(base_PainelMedicos[QTE_DISPONIBILIZADA])
+    - _Formatação Produtividade:
+      IF([Produtividade] >= [Meta ICH] , "GREEN", "RED")
+      
+    - _Formatação Produtividade Seta:
+      
+      VAR CorVerde = "GREEN"
+      VAR CorVermelha = "RED"
+      VAR IconeVerde =
+      "data:image/svg+xml;utf8, <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'> <polygon fill='"& CorVerde &"' points='1,12.5 7.5,3.833 14,12.5 '/> <path fill='"& CorVerde &"' d='M7.5,3L0,13h15L7.5,3z M7.5,4.667L13,12H2L7.5,4.667z'/> </svg>"
+      VAR IconeVermelho =
+      "data:image/svg+xml;utf8, <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'> <polygon fill='"& CorVermelha &"' points='14,3.5 7.5,12.167 1,3.5 '/> <path fill='"& CorVermelha &"' d='M7.5,13L15,3H0L7.5,13z M7.5,11.333L2,4h11L7.5,11.333z'/> </svg>"
+      
+      RETURN
+      IF([Produtividade] >= [Meta ICH], IconeVerde, IconeVermelho)
+    - _Formatação Parametrização:
+      IF([Paramet. Atual] >= [Meta ICH] , "GREEN", "RED")
+    - _Formatação Espera Médica Seta:
+      
+      VAR CorVerde = "GREEN"
+      VAR CorVermelha = "RED"
+      VAR IconeVerde =
+      "data:image/svg+xml;utf8, <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'> <polygon fill='"& CorVerde &"' points='1,12.5 7.5,3.833 14,12.5 '/> <path fill='"& CorVerde &"' d='M7.5,3L0,13h15L7.5,3z M7.5,4.667L13,12H2L7.5,4.667z'/> </svg>"
+      VAR IconeVermelho =
+      "data:image/svg+xml;utf8, <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'> <polygon fill='"& CorVermelha &"' points='14,3.5 7.5,12.167 1,3.5 '/> <path fill='"& CorVermelha &"' d='M7.5,13L15,3H0L7.5,13z M7.5,11.333L2,4h11L7.5,11.333z'/> </svg>"
+      
+      RETURN
+      IF([% PCTE > 30 Min] <= 0.25, IconeVerde, IconeVermelho)
+    - _Formatação Espera Médica:
+      IF([% PCTE > 30 Min] <= 0.25 , "GREEN", "RED")
+    - _Formatação Falta Médica:
+      IF([% Falta Médica] <= 0.025 , "GREEN", "RED")
+    - _Formatação Falta Paciente:
+      IF([% Falta Paciente] <= 0.25 , "GREEN", "RED")
+    - _Formatação Remarcação Médica:
+      IF([% Remarcação Médica] <= 0.03 , "GREEN", "RED")
+    - _Formatação Consultas Canceladas:
+      IF([% Cons. Canceladas] <= 0.475 , "GREEN", "RED")
+    - #Ultima Atualização:
+      CALCULATE(MAX(Calendario[Date]),ALL())
+    - Consultas Efetivadas:
+      SUM(base_PainelMedicos[QTD_EFETIVADOS])
+    - Produtividade 2:
+      
+      VAR ConsultaEfetivada = 
+      SUM(base_PainelMedicos[CONSULTA EFETIVADA])
+      
+      VAR RetornoEfetivado = 
+      SUM(base_PainelMedicos[RETORNO EFETIVADO])
+      
+      VAR TotalConsultas = 
+      ConsultaEfetivada + RetornoEfetivado
+      
+      VAR TotalHoras = 
+      SUM(base_PainelMedicos[HORA EFETIVADA])
+      
+      RETURN
+      DIVIDE(TotalConsultas, TotalHoras)
+      
+    - Produtividade_DGE:
+      
+      VAR ATENDIMETO_DGE = SUM(base_PainelMedicos[CONSULTAS_DGE])
+      VAR HORAS_DGE = CALCULATE(
+          SUM(base_PainelMedicos[HORAS_DGE]),
+          FILTER(base_PainelMedicos, base_PainelMedicos[HORAS_DGE] <> 0))
+      VAR PRODUTIVIDADE_DGE = DIVIDE(ATENDIMETO_DGE , HORAS_DGE, 0)
+      
+      RETURN
+      COALESCE(PRODUTIVIDADE_DGE,0)
+      
+      
+      
+      
+      
+      
+    - ##Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+      
+----------------------------------------
+Tabela: Calendario
+  Colunas:
+    - Date [dateTime]
+    - Dia [int64]
+    - Ano [int64]
+    - Num.Mês [int64]
+    - Dia Semana [string]
+    - Mês Abrev [string]
+    - Mês Extenso [string]
+    - Mês Ano [string]
+    - Dia Mês [string]
+    - Mês Atual [string]
+    - Ordem Mês Ano [int64]
+----------------------------------------
+Tabela: UF_Regional
+  Colunas:
+    - ID [int64]
+    - UNIDADE FEDERATIVA [string]
+    - UF [string]
+    - REGIONAL [string]
+    - ORDEM [int64]
+    - LATITUDE [string]
+    - LONGITUDE [string]
+    - UF Ajustada [string] (Calculada)
+----------------------------------------
+Tabela: Faixa Atraso
+  Colunas:
+    - Faixa [string]
+    - MIN [double]
+    - MAX [double]
+----------------------------------------
+Tabela: bt_dinamico Médico
+  Colunas:
+    - Medidas Dinamicas [string]
+    - Medidas Dinamicas Campos [string]
+    - Medidas Dinamicas Pedido [int64]
+----------------------------------------
+Tabela: bt_dinamico Paciente
+  Colunas:
+    - Faltas [string]
+    - Faltas Campos [string]
+    - Faltas Pedido [int64]
+----------------------------------------
+Tabela: bt_dinamico Datas
+  Colunas:
+    - Hierarquia Datas [string]
+    - Hierarquia Datas Campos [string]
+    - Hierarquia Datas Pedido [int64]
+----------------------------------------
+Tabela: bt_dinamico Produtividade
+  Colunas:
+    - bt_dinamico Produtividade [string]
+    - bt_dinamico Produtividade Campos [string]
+    - bt_dinamico Produtividade Pedido [int64]
+----------------------------------------
+Tabela: bt_dinamico Atraso e Espera
+  Colunas:
+    - bt_dinamico Atraso e Espera [string]
+    - bt_dinamico Atraso e Espera Campos [string]
+    - bt_dinamico Atraso e Espera Pedido [int64]
+----------------------------------------
+Tabela: Caminho
+  Colunas:
+    - Caminho [string]
+----------------------------------------
+Tabela: DataAtualizacao
+  Colunas:
+    - DataAtualização_1 [string]
+    - DataAtualização [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+base_PainelMedicos[UF] ---> UF_Regional[UF]
+base_PainelMedicos[DATA] ---> Calendario[Date]

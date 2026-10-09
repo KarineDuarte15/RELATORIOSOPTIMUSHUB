@@ -1,0 +1,365 @@
+============================================================
+MAPEAMENTO DE REGRAS: BI_Alerta_Vagas_TeleSaude.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: 01_Dim_Especialidade
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+    - META_ANS [int64]
+    - META_HAP [int64]
+----------------------------------------
+Tabela: #MEDIDAS
+  Colunas:
+    - Column [int64]
+  Medidas DAX (Regras de Negócio):
+    - 01_QTD_VAGAS_CALENDARIO:
+      SUM('FATO_VAGAS'[QTD_VAGAS])
+      
+      
+      
+    - Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+    - 02_QTD_VAGAS_INTRA_HORA:
+      
+      VAR UltData = 
+      CALCULATE(MAX('0_DIM_CALENDARIO'[Date]), ALL('0_DIM_CALENDARIO'))
+      RETURN
+      CALCULATE(
+          '#MEDIDAS'[01_QTD_VAGAS_CALENDARIO],
+          'FATO_VAGAS'[FILTRO_CALC] = 1
+      )
+      
+    - 03_VAGAS_MAX_HORA:
+      
+      CALCULATE(
+          '#MEDIDAS'[01_QTD_VAGAS_CALENDARIO],
+          FATO_VAGAS[HORA] = MAX(FATO_VAGAS[HORA]),
+          FATO_VAGAS[FILTRO_CALC] = 1
+      )
+    - 04_QTD_PRESTADORES:
+      SUM(FATO_VAGAS[QTD_PRESTADORES])
+    - 05_PRESTADORES_MAX_HORA:
+      
+      CALCULATE(
+          '#MEDIDAS'[04_QTD_PRESTADORES],
+          FATO_VAGAS[HORA] = MAX(FATO_VAGAS[HORA]),
+          FATO_VAGAS[FILTRO_CALC] = 1
+      )
+    - CLASSIFICACAO_DIA:
+      
+      "D-" & DATEDIFF(SELECTEDVALUE(FATO_VAGAS[DT_FOTO]), SELECTEDVALUE(FATO_VAGAS[DT_CONSULTA]), DAY)
+      
+      
+    - 03_02_VAGAS_MAX_HORA_ANS:
+      CALCULATE(
+          '#MEDIDAS'[01_QTD_VAGAS_CALENDARIO],
+          FATO_VAGAS[HORA] = MAX(FATO_VAGAS[HORA]),
+          'FATO_VAGAS'[FILTRO_CALC] = 1,
+          'FATO_VAGAS'[TIPO_META] = "ANS"
+      )
+    - 03_03_VAGAS_MAX_HORA_HAP:
+      CALCULATE(
+          '#MEDIDAS'[01_QTD_VAGAS_CALENDARIO],
+          FATO_VAGAS[HORA] = MAX(FATO_VAGAS[HORA]),
+          'FATO_VAGAS'[FILTRO_CALC] = 1,
+          'FATO_VAGAS'[TIPO_META] = "HAP"
+      )
+    - Atualização:
+      "Atualizado em: " & SELECTEDVALUE('DT_ATUAIZAÇÃO_2'[DT_ATUAIZAÇÃO_2]) & UNICHAR(10) & " Dados até: " & 
+      FORMAT(
+          MAX('FATO_VAGAS'[DT_FOTO]) + (MAX('FATO_VAGAS'[HORA]) / 24),
+          "dd/mm/yyyy hh:00"
+      )
+    - _Qt Dias_Horarios Zerados ANS Base:
+      
+      
+      VAR Contagem =
+          COUNTROWS(
+              FILTER(
+                  SUMMARIZE(
+                      FATO_VAGAS,
+                      FATO_VAGAS[DT_FOTO],
+                      FATO_VAGAS[HORA],
+                      FATO_VAGAS[CD_ESPECIALIDADE],
+                      "QtVagas",
+                          CALCULATE(
+                              SUM(FATO_VAGAS[QTD_VAGAS]),
+                              FATO_VAGAS[FILTRO_CALC] = 1,
+                              FATO_VAGAS[TIPO_META] = "ANS"
+                          )
+                  ),
+                  [QtVagas] <= 4
+              )
+          )
+      
+      RETURN
+      IF(ISBLANK(Contagem), 0, Contagem)
+    - _Qt Dias_Horarios:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              FATO_VAGAS,
+              FATO_VAGAS[DT_FOTO],
+              FATO_VAGAS[HORA],
+              FATO_VAGAS[CD_ESPECIALIDADE]
+          )
+      )
+    - % Horarios Sem Vagas:
+      
+      VAR QtHorarios = [_Qt Dias_Horarios]
+      VAR QtSemVagas = [_Qt Dias_Horarios Zerados ANS Base]
+      
+      RETURN
+      IF(
+          QtHorarios = 0 || ISBLANK(QtHorarios),
+          BLANK(),
+          IF(
+              ISBLANK(QtSemVagas) || QtSemVagas = 0,
+              0,
+              DIVIDE(QtSemVagas, QtHorarios, 0)
+          )
+      )
+    - Dia_Medio_Ponderado:
+      
+      VAR Base =
+          ADDCOLUMNS(
+              FATO_VAGAS,
+              "D", FATO_VAGAS[ORDEM_DIA]
+          )
+      
+      VAR Agrupado =
+          SUMMARIZE(
+              Base,
+              [D],
+              "Qtd", SUM(FATO_VAGAS[QTD_VAGAS])
+          )
+      
+      RETURN
+      DIVIDE(
+          SUMX(Agrupado, [D] * [Qtd]),
+          SUMX(Agrupado, [Qtd])
+      )
+    - Dia_Medio_Ponderado_Util:
+      
+      VAR Base =
+          ADDCOLUMNS(
+              FATO_VAGAS,
+              "D", FATO_VAGAS[ORDEM_DIA_UTIL]
+          )
+      
+      VAR Agrupado =
+          SUMMARIZE(
+              Base,
+              [D],
+              "Qtd", SUM(FATO_VAGAS[QTD_VAGAS])
+          )
+      
+      RETURN
+      DIVIDE(
+          SUMX(Agrupado, [D] * [Qtd]),
+          SUMX(Agrupado, [Qtd])
+      )
+    - Tooltip_Vazio:
+      " "
+----------------------------------------
+Tabela: 0_DIM_CALENDARIO
+  Colunas:
+    - Date [dateTime]
+    - ANO [int64]
+    - MES [int64]
+    - DIA [int64]
+    - NM_MES [string]
+    - NM_MES_ABRV [string]
+    - MES_ANO [string]
+    - CLASSIF_MESANO [int64]
+    - DIA_SEM_NOME [string]
+    - DIA_SEM_ABREV [string]
+    - DIA_SEMANA_NO. [int64]
+    - DIA_SEM_LETRA [string]
+    - SEMANA_ANO [int64]
+    - FILTRO_CALENDARIO [int64]
+    - DIA_MES [string]
+    - FERIADO [int64]
+    - DIA_UTIL [int64]
+----------------------------------------
+Tabela: 0.3_DIM_CALENDARIO_CONSULTAS
+  Colunas:
+    - Date [dateTime]
+    - ANO [int64]
+    - MES [int64]
+    - DIA [int64]
+    - NM_MES [string]
+    - NM_MES_ABRV [string]
+    - MES_ANO [string]
+    - CLASSIF_MESANO [int64]
+    - DIA_SEM_NOME [string]
+    - DIA_SEM_ABREV [string]
+    - DIA_SEMANA_NO. [int64]
+    - DIA_SEM_LETRA [string]
+    - SEMANA_ANO [int64]
+    - FILTRO_CALENDARIO [int64]
+    - DIA_MES [string]
+    - DIA_ORDEM [int64]
+    - FERIADO [int64] (Calculada)
+    - DIA_UTIL [int64] (Calculada)
+----------------------------------------
+Tabela: 02_Dim_Meta
+  Colunas:
+    - META [string]
+----------------------------------------
+Tabela: FATO_VAGAS
+  Colunas:
+    - DT_FOTO [dateTime]
+    - HORA [int64]
+    - CD_ESPECIALIDADE [int64]
+    - DT_CONSULTA [dateTime]
+    - QTD_VAGAS [int64]
+    - QTD_PRESTADORES [int64]
+    - DT_META [dateTime]
+    - TIPO_META [string]
+    - FILTRO_CALC [int64]
+    - CLASSIFICACAO_DIA [string] (Calculada)
+    - ORDEM_DIA [int64] (Calculada)
+    - ORDEM_DIA_UTIL [int64] (Calculada)
+----------------------------------------
+Tabela: 01_FATO_HISTORICA
+  Colunas:
+    - DT_FOTO [dateTime]
+    - HORA [int64]
+    - CD_ESPECIALIDADE [int64]
+    - DT_CONSULTA [dateTime]
+    - QTD_VAGAS [int64]
+    - QTD_PRESTADORES [int64]
+    - DT_META [dateTime]
+    - TIPO_META [string]
+    - FILTRO_CALC [int64]
+----------------------------------------
+Tabela: DT_ATUAIZAÇÃO_2
+  Colunas:
+    - DT_ATUAIZAÇÃO_2 [dateTime]
+----------------------------------------
+Tabela: f_Necessidade
+  Colunas:
+    - DATA [dateTime]
+    - CD_ESPECIALIDADE [int64]
+    - ESPECIALIDADE [string]
+    - NEC_COMPRA [double]
+    - QTD_DISP [double]
+    - QTD_MARC [double]
+    - SALDO [double]
+    - SemanaAno [int64] (Calculada)
+    - Dia_Sem_Abrev [string] (Calculada)
+    - MesAno [string] (Calculada)
+    - Dia Numeral [int64] (Calculada)
+    - No. Dia [int64]
+    - DiaSemanaNum [int64] (Calculada)
+    - MesAnoOrdem [int64] (Calculada)
+    - Dia-DiaSemana [string] (Calculada)
+  Medidas DAX (Regras de Negócio):
+    - Necessidade:
+      SUM(f_Necessidade[NEC_COMPRA])
+    - Disponibilizadas:
+      SUM(f_Necessidade[QTD_DISP])
+    - Marcadas:
+      SUM ( f_Necessidade[QTD_MARC] )
+    - Disponivel:
+      SUM( f_Necessidade[SALDO] )
+    - Card_Calendario_Pro_SVG:
+      
+      
+      -- 1. Variáveis de Dados
+      VAR Necessidade = [Necessidade]
+      VAR Disponibilizadas = [Disponibilizadas]
+      VAR Marcadas = [Marcadas]
+      VAR Dia = SELECTEDVALUE(f_Necessidade[Dia Numeral])
+      
+      -- 2. Lógica das Barras
+      VAR LarguraMaxima = 210
+      VAR MaxValorBase = MAX(Necessidade, MAX(Disponibilizadas, Marcadas))
+      VAR MaxValorSafe = IF(MaxValorBase = 0, 1, MaxValorBase)
+      
+      VAR LarguraDispo = SUBSTITUTE(FORMAT(DIVIDE(Disponibilizadas, MaxValorSafe, 0) * LarguraMaxima, "0.00"), ",", ".")
+      VAR LarguraMarcadas = SUBSTITUTE(FORMAT(DIVIDE(Marcadas, MaxValorSafe, 0) * LarguraMaxima, "0.00"), ",", ".")
+      
+      -- 3. Cálculos Adicionais e Cores Condicionais
+      VAR Disponivel = Disponibilizadas - Marcadas
+      VAR SaldoTxt = FORMAT(Disponivel, "#,##0")
+      VAR PercUtilizado = DIVIDE(Marcadas, Disponibilizadas, 0)
+      
+      VAR CorPrincipalLivre = IF(Disponivel = 0, "#D32F2F", "#ED862E")
+      VAR CorFundoLivre = IF(Disponivel = 0, "#FFEBEE", "#FFF9F2")
+      VAR CorBordaLivre = IF(Disponivel = 0, "#FFCDD2", "#FFEAD2")
+      
+      RETURN
+      "data:image/svg+xml;utf8," &
+      "<svg width='250' height='275' viewBox='0 0 250 275' xmlns='http://www.w3.org/2000/svg' style='font-family: Segoe UI, Arial, sans-serif;'>
+      
+          <rect x='2' y='2' width='246' height='271' rx='16' fill='white' stroke='#F0F0F0' stroke-width='1'/>
+      
+          <text x='20' y='45' fill='#454F5B' font-size='40' font-weight='800'>" & Dia & "</text>
+      
+          <g transform='translate(20, 65)'>
+              <text x='0' y='10' fill='#637381' font-size='11' font-weight='600'>NECESSIDADE</text>
+              <text x='210' y='10' fill='#212B36' font-size='18' font-weight='800' text-anchor='end'>" & FORMAT(Necessidade, "#,##0") & "</text>
+      
+              <text x='0' y='45' fill='#637381' font-size='11' font-weight='600'>DISPONIBILIZADAS</text>
+              <text x='210' y='45' fill='#22C55E' font-size='16' font-weight='700' text-anchor='end'>" & FORMAT(Disponibilizadas, "#,##0") & "</text>
+      
+              <rect x='0' y='55' width='210' height='14' rx='7' fill='#F4F6F8'/>
+              <rect x='0' y='55' width='" & LarguraDispo & "' height='14' rx='7' fill='#22C55E' fill-opacity='0.4'/>
+              <rect x='0' y='58' width='" & LarguraMarcadas & "' height='8' rx='4' fill='#ED862E'/>
+      
+              <text x='0' y='88' fill='#637381' font-size='11' font-weight='600'>MARCADAS</text>
+              <text x='210' y='88' fill='#ED862E' font-size='16' font-weight='700' text-anchor='end'>" & FORMAT(Marcadas, "#,##0") & "</text>
+          </g>
+      
+          <rect x='55' y='175' width='140' height='20' rx='10' fill='#F4F6F8'/>
+          <text x='125' y='189' fill='#637381' font-size='15' font-weight='600' text-anchor='middle'>
+              <tspan fill='#212B36' font-weight='800'>" & FORMAT(PercUtilizado, "0.0%") & "</tspan> da capacidade utilizada
+          </text>
+      
+          <g transform='translate(20, 210)'>
+              <rect x='0' y='0' width='210' height='50' rx='10' fill='" & CorFundoLivre & "' stroke='" & CorBordaLivre & "' stroke-width='1'/>
+              <text x='105' y='20' fill='" & CorPrincipalLivre & "' font-size='11' font-weight='700' text-anchor='middle'>CONSULTAS LIVRES</text>
+              <text x='105' y='42' fill='" & CorPrincipalLivre & "' font-size='24' font-weight='800' text-anchor='middle'>" & SaldoTxt & "</text>
+          </g>
+      
+      </svg>"
+----------------------------------------
+Tabela: 0_DIM_FERIADOS
+  Colunas:
+    - Data [dateTime]
+    - Feriado [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+FATO_VAGAS[DT_META] ---> LocalDateTable_8fe90f8a-fce0-4f48-91a9-70f2f7a8bbe0[Date]
+FATO_VAGAS[CD_ESPECIALIDADE] ---> 01_Dim_Especialidade[CD_ESPECIALIDADE]
+FATO_VAGAS[QTD_VAGAS] ---> 02_Dim_Meta[META]
+0.3_DIM_CALENDARIO_CONSULTAS[Date] ---> LocalDateTable_81531acf-3f70-41ff-b3df-b5d0436bae7e[Date]
+FATO_VAGAS[DT_CONSULTA] ---> 0.3_DIM_CALENDARIO_CONSULTAS[Date]
+01_FATO_HISTORICA[DT_FOTO] ---> LocalDateTable_4fbff546-0449-47c5-a4dc-5c2282c532c9[Date]
+01_FATO_HISTORICA[DT_CONSULTA] ---> LocalDateTable_3bac00e0-5c71-42f3-9434-91d2c13963e6[Date]
+01_FATO_HISTORICA[DT_META] ---> LocalDateTable_bf18c190-6804-4a06-9386-e96481a848d1[Date]
+01_FATO_HISTORICA[CD_ESPECIALIDADE] ---> 01_Dim_Especialidade[CD_ESPECIALIDADE]
+DT_ATUAIZAÇÃO_2[DT_ATUAIZAÇÃO_2] ---> LocalDateTable_e07efaf7-9363-4446-8d0e-e49c45c7234f[Date]
+f_Necessidade[DATA] ---> LocalDateTable_175de9a9-5054-4e9f-8c6e-3faf82a7811e[Date]
+f_Necessidade[CD_ESPECIALIDADE] ---> 01_Dim_Especialidade[CD_ESPECIALIDADE]
+0_DIM_FERIADOS[Data] ---> LocalDateTable_765a51fb-e940-4a6b-b215-f19a75f578c0[Date]
+0_DIM_CALENDARIO[Date] ---> LocalDateTable_31e90105-110e-41a4-9146-8cb0579b5422[Date]
+FATO_VAGAS[DT_FOTO] ---> 0_DIM_CALENDARIO[Date]

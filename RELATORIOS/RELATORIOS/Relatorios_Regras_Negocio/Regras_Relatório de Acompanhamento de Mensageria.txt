@@ -1,0 +1,2002 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatório de Acompanhamento de Mensageria.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: f_Mensageria
+  Colunas:
+    - COD_UNIDADE [int64]
+    - TIPO [int64]
+    - CD_ESPECIALIDADE [int64]
+    - STATUS_CONSULTA [int64]
+    - TIPO_CANCELAMENTO [double]
+    - QT_SEM_TEL [double]
+    - QT_SEM_EMAIL [double]
+    - QT_CONSULTAS [double]
+    - QT_DISPARO [double]
+    - QT_SUCESSO [double]
+    - QT_LEITURA [double]
+    - QT_ELEGIVEIS [double]
+    - TIPO_REGUA [int64]
+    - DT_CONSULTA [dateTime]
+    - LEGENDA_TIPO_ACAO [int64]
+    - QT_N_ELEGIVEIS [double]
+    - CONFIRMACAO_CONSULTA [double]
+    - CANCELA_CONSULTA [double]
+    - SUCESSO_CANCELAMENTO_CONSULTA [double]
+    - FALHA_CANCELAMENTO_CONSULTA [double]
+----------------------------------------
+Tabela: Dim_Calendario
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Ano-Mes [string]
+    - Mes-Ano [string]
+    - Nome do Mês Completo [string]
+    - Dia da Semana Completo [string]
+    - Classif_MesAno [int64]
+    - Nome do Mês Abrev [string]
+    - Dia da Semana Abrev [string]
+    - Semana-Ano [int64]
+    - Dia/Mês [string]
+    - Semana-Mes [int64]
+    - Semana-Mes2 [int64]
+    - Semana-Mes_Nome [string]
+----------------------------------------
+Tabela: #Medidas
+  Medidas DAX (Regras de Negócio):
+    - Qtde Registros:
+      COUNTROWS( f_Mensageria )
+    - Qt Consultas:
+      SUM( f_Mensageria[QT_CONSULTAS] )
+    - Qt Disparo:
+      SUM( f_Mensageria[QT_DISPARO] )
+    - Qt Sem Email:
+      SUM( f_Mensageria[QT_SEM_EMAIL] )
+    - Qt Sem Tel:
+      SUM( f_Mensageria[QT_SEM_TEL] )
+    - Qt Sucesso:
+      SUM( f_Mensageria[QT_SUCESSO] )
+    - Qt Leitura:
+      SUM( f_Mensageria[QT_LEITURA] )
+    - Taxa de Leitura:
+      DIVIDE( [Qt Leitura] , [Qt Sucesso] )
+    - Taxa de Sucesso:
+      DIVIDE( [Qt Sucesso] , [Qt Disparo] )
+    - Qt N Disparo:
+      [Qt Elegivel] - [Qt Disparo]
+    - Taxa Disparo:
+      DIVIDE( [Qt Disparo] ,  [Qt Elegivel] )
+    - Qt Elegivel:
+      SUM ( f_Mensageria[QT_ELEGIVEIS] ) 
+    - Taxa Elegível:
+      DIVIDE( [Qt Elegivel] , [Qt Consultas] )
+    - % Falta Paciente:
+      
+      VAR QtFaltas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = 2
+          )
+      )
+      VAR QtEfetivadas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[STATUS_CONSULTA] = 1
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltas, QtFaltas + QtEfetivadas, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+      
+    - % Falta Paciente_Disparo:
+      
+      VAR QtFaltasDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = 2 &&
+              NOT ISBLANK(f_Mensageria[QT_DISPARO])
+          )
+      )
+      VAR QtDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_DISPARO])
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasDisparo, QtDisparo, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Qt N Leitura:
+      [Qt Sucesso] - [Qt Leitura]
+    - % Falta Paciente_Leitura:
+      
+      VAR QtFaltasLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = 2 &&
+              NOT ISBLANK(f_Mensageria[QT_LEITURA])
+          )
+      )
+      VAR QtLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_LEITURA])
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasLeitura, QtLeitura, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - % Falta Paciente_Elegível:
+      
+      VAR QtFaltasElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = 2 &&
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS])
+          )
+      )
+      VAR QtElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS])
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasElegivel, QtElegivel, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - % Falta Paciente_Sucesso:
+      
+      VAR QtFaltasSucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = 2 &&
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO])
+          )
+      )
+      VAR Qtsucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO])
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasSucesso, Qtsucesso, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Dif Cons x Elegivel:
+      
+      DIVIDE([Qt Consultas] - [Qt Elegivel], [Qt Consultas])
+      
+    - Dif Elegivel x Disparo:
+      
+      DIVIDE([Qt Elegivel] - [Qt Disparo], [Qt Elegivel])
+      
+    - Dif Sucesso x Disparo:
+      
+      DIVIDE([Qt Disparo] - [Qt Sucesso], [Qt Disparo])
+    - Dif Cons x 100%:
+      1
+    - Dif Sucesso x Leitura:
+      
+      DIVIDE([Qt Sucesso] - [Qt Leitura] , [Qt Sucesso])
+    - Qt N Sucesso:
+      [Qt Disparo] - [Qt Sucesso]
+    - % Falta Paciente_N Leitura:
+      
+      VAR __QtdeSucesso =
+      CALCULATE(
+          SUM(f_Mensageria[QT_SUCESSO]),
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = "FALTA PACIENTE"
+          )
+      )
+      VAR __QtdeLeitura = 
+      CALCULATE(
+          SUM(f_Mensageria[QT_LEITURA]),
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = "FALTA PACIENTE" 
+          )
+      )
+      VAR __NLeitura = __QtdeSucesso - __QtdeLeitura
+      VAR __TotalSucesso = [Qt Sucesso]
+      VAR __TotalLeitura = [Qt Leitura]
+      VAR __TotalNLeitura = __TotalSucesso - __TotalLeitura
+      RETURN
+      DIVIDE(__NLeitura , __TotalNLeitura)
+    - % Falta Paciente_N Sucesso:
+      
+      VAR __QtdeDisparo =
+      CALCULATE(
+          SUM(f_Mensageria[QT_DISPARO]),
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = "FALTA PACIENTE"
+          )
+      )
+      VAR __QtdeSucesso = 
+      CALCULATE(
+          SUM(f_Mensageria[QT_SUCESSO]),
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = "FALTA PACIENTE" 
+          )
+      )
+      VAR __NSucesso = __QtdeDisparo - __QtdeSucesso
+      VAR __TotalDisparo = [Qt Disparo]
+      VAR __TotalSucesso = [Qt Sucesso]
+      VAR __TotalNSucesso = __TotalDisparo - __TotalSucesso
+      RETURN
+      IF ( ISBLANK(DIVIDE(__NSucesso , __TotalNSucesso)) , "-" , DIVIDE(__NSucesso , __TotalNSucesso))
+    - % Falta Paciente_N Disparo:
+      
+      VAR __QtdeElegivelFP =
+      CALCULATE(
+          SUM(f_Mensageria[QT_ELEGIVEIS]),
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = "FALTA PACIENTE"
+          )
+      )
+      VAR __QtdeDisparoFP = 
+      CALCULATE(
+          SUM(f_Mensageria[QT_DISPARO]),
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[TIPO_CANCELAMENTO] = "FALTA PACIENTE" 
+          )
+      )
+      VAR __NDisparoFP = __QtdeElegivelFP - __QtdeDisparoFP
+      VAR __TotalElegivel = [Qt Elegivel]
+      VAR __TotalDisparo = [Qt Disparo]
+      VAR __TotalNDisparo = __TotalElegivel - __TotalDisparo
+      RETURN
+      DIVIDE(__NDisparoFP , __TotalNDisparo)
+    - Whats_% Falta Paciente:
+      
+      VAR QtFaltas =
+          CALCULATE (
+              [Qt Consultas],
+              FILTER (
+                  f_Mensageria,
+                  RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR QtEfetivadas =
+          CALCULATE (
+              [Qt Consultas],
+              FILTER (
+                  f_Mensageria,
+                  f_Mensageria[STATUS_CONSULTA] = 1
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltas, QtFaltas + QtEfetivadas, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+    - Whats_% Falta Paciente_Elegível:
+      
+      VAR QtFaltasElegivel =
+          CALCULATE (
+              [Qt Elegivel],
+              FILTER (
+                  f_Mensageria,
+                  RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                      && NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR QtElegivel =
+          CALCULATE (
+              [Qt Elegivel],
+              FILTER (
+                  f_Mensageria,
+                  NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasElegivel, QtElegivel, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Disparo:
+      
+      VAR QtFaltasDisparo =
+          CALCULATE (
+              [Qt Disparo],
+              FILTER (
+                  f_Mensageria,
+                  RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                      && NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                           && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR QtDisparo =
+          CALCULATE (
+              [Qt Disparo],
+              FILTER (
+                  f_Mensageria,
+                  NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                       && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasDisparo, QtDisparo, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Sucesso:
+      
+      VAR QtFaltasSucesso =
+          CALCULATE (
+              [Qt Sucesso],
+              FILTER (
+                  f_Mensageria,
+                  RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                      && NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR Qtsucesso =
+          CALCULATE (
+              [Qt Sucesso],
+              FILTER (
+                  f_Mensageria,
+                  NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                     && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasSucesso, Qtsucesso, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Leitura:
+      
+      VAR QtFaltasLeitura =
+          CALCULATE (
+              [Qt Leitura],
+              FILTER (
+                  f_Mensageria,
+                  RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                      && NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR QtLeitura =
+          CALCULATE (
+              [Qt Leitura],
+              FILTER (
+                  f_Mensageria,
+                  NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                       && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+              )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasLeitura, QtLeitura, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Email_% Falta Paciente_Leitura:
+      
+      VAR QtFaltasLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_LEITURA]) &&
+             RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR QtLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_LEITURA]) &&
+             RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasLeitura, QtLeitura, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - SMS_% Falta Paciente_Leitura:
+      
+      VAR QtFaltasLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+             RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_LEITURA]) &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR QtLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_LEITURA]) &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasLeitura, QtLeitura, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Email_% Falta Paciente:
+      
+      VAR QtFaltas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR QtEfetivadas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[STATUS_CONSULTA] = 1 &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltas, QtFaltas + QtEfetivadas, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - SMS_% Falta Paciente:
+      
+      VAR QtFaltas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" 
+              && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR QtEfetivadas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[STATUS_CONSULTA] = 1 &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltas, QtFaltas + QtEfetivadas, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - SMS_% Falta Paciente_Disparo:
+      
+      VAR QtFaltasDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO])= "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_DISPARO]) &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR QtDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_DISPARO]) &&
+             RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasDisparo, QtDisparo, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Email_% Falta Paciente_Disparo:
+      
+      VAR QtFaltasDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_DISPARO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR QtDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_DISPARO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasDisparo, QtDisparo, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - SMS_% Falta Paciente_Elegível:
+      
+      VAR QtFaltasElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS])  &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR QtElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS]) &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasElegivel, QtElegivel, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Email_% Falta Paciente_Elegível:
+      
+      VAR QtFaltasElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS])  &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR QtElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasElegivel, QtElegivel, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - SMS_% Falta Paciente_Sucesso:
+      
+      VAR QtFaltasSucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO]) &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR Qtsucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO]) &&
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasSucesso, Qtsucesso, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Email_% Falta Paciente_Sucesso:
+      
+      VAR QtFaltasSucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR Qtsucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasSucesso, Qtsucesso, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Whats_Qt Elegivel:
+      
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+               RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+          )
+      )
+    - SMS_Qt Elegivel:
+      
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+    - EMAIL_Qt Elegivel:
+      
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+    - Whats_Qt Disparo:
+      
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+               RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+          )
+      )
+    - SMS_Qt Disparo:
+      
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+    - EMAIL_Qt Disparo:
+      
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+    - Whats_Qt Sucesso:
+      
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+               RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+          )
+      )
+    - SMS_Qt Sucesso:
+      
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+    - EMAIL_Qt Sucesso:
+      
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+    - Whats_Qt Leitura:
+      
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+          )
+      )
+    - SMS_Qt Leitura:
+      
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+             RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+    - EMAIL_Qt Leitura:
+      
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+    - Whats_Qt Consultas:
+      
+      CALCULATE (
+          [Qt Consultas],
+          FILTER ( f_Mensageria,  RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS" )
+      )
+      
+    - EMAIL_Qt Consultas:
+      
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+          )
+      )
+    - SMS_Qt Consultas:
+      
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+          )
+      )
+    - Whats_Taxa Elegível:
+      DIVIDE( [Whats_Qt Elegivel] , [Whats_Qt Consultas] )
+    - SMS_Taxa Elegível:
+      DIVIDE( [SMS_Qt Elegivel] , [SMS_Qt Consultas] )
+    - EMAIL_Taxa Elegível:
+      DIVIDE( [EMAIL_Qt Elegivel] , [EMAIL_Qt Consultas] )
+    - Whats_Taxa Disparo:
+      DIVIDE( [Whats_Qt Disparo] , [Whats_Qt Elegivel] )
+    - SMS_Taxa Disparo:
+      DIVIDE( [SMS_Qt Disparo] , [SMS_Qt Elegivel] )
+    - EMAIL_Taxa Disparo:
+      DIVIDE( [EMAIL_Qt Disparo] , [EMAIL_Qt Elegivel] )
+    - Whats_Taxa Sucesso:
+      DIVIDE( [Whats_Qt Sucesso] , [Whats_Qt Disparo] )
+    - SMS_Taxa Sucesso:
+      DIVIDE( [SMS_Qt Sucesso] , [SMS_Qt Disparo] )
+    - EMAIL_Taxa Sucesso:
+      DIVIDE( [EMAIL_Qt Sucesso] , [EMAIL_Qt Disparo] )
+    - Whats_Taxa Leitura:
+      DIVIDE( [Whats_Qt Leitura] , [Whats_Qt Sucesso] )
+    - SMS_Taxa Leitura:
+      DIVIDE( [SMS_Qt Leitura] , [SMS_Qt Sucesso] )
+      
+    - EMAIL_Taxa Leitura:
+      DIVIDE( [EMAIL_Qt Leitura] , [EMAIL_Qt Sucesso] )
+    - Whats_% Falta Paciente B:
+      
+      VAR QtFaltas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtEfetivadas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      f_Mensageria[STATUS_CONSULTA] = 1
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltas, QtFaltas + QtEfetivadas, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Disparo B:
+      
+      VAR QtFaltasDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                           && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasDisparo, QtDisparo, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Elegível B:
+      
+      VAR QtFaltasElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                               && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasElegivel, QtElegivel, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Sucesso B:
+      
+      VAR QtFaltasSucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR Qtsucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasSucesso, Qtsucesso, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_% Falta Paciente_Leitura B:
+      
+      VAR QtFaltasLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                      && RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasLeitura, QtLeitura, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Whats_Qt Consultas B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Consultas],
+              FILTER ( f_Mensageria,  RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+      
+    - Whats_Qt Disparo B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Disparo],
+              FILTER ( f_Mensageria,  RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS")
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - Whats_Qt Elegivel B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Elegivel],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - Whats_Qt Leitura B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Leitura],
+              FILTER ( f_Mensageria,  RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - Whats_Qt Sucesso B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Sucesso],
+              FILTER ( f_Mensageria,  RELATED(Dim_TipoAcao[NOME_CANAL]) = "WHATS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - Whats_Taxa Disparo B:
+      DIVIDE( [Whats_Qt Disparo B] , [Whats_Qt Elegivel B] )
+    - Whats_Taxa Elegível B:
+      DIVIDE( [Whats_Qt Elegivel B] , [Whats_Qt Consultas B] )
+    - Whats_Taxa Leitura B:
+      DIVIDE( [Whats_Qt Leitura B] , [Whats_Qt Sucesso B] )
+    - Whats_Taxa Sucesso B:
+      DIVIDE( [Whats_Qt Sucesso B] , [Whats_Qt Disparo B] )
+    - Mes Selecionado:
+      SELECTEDVALUE( Dim_Calendario[Mes-Ano] )
+    - Mes Selecionado B:
+      SELECTEDVALUE( Dim_Calendario2[Mes-Ano] )
+    - SMS_% Falta Paciente B:
+      
+      VAR QtFaltas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtEfetivadas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      f_Mensageria[STATUS_CONSULTA] = 1
+                          &&RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltas, QtFaltas + QtEfetivadas, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+    - SMS_% Falta Paciente_Disparo B:
+      
+      VAR QtFaltasDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                          && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                          && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasDisparo, QtDisparo, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - SMS_% Falta Paciente_Elegível B:
+      
+      VAR QtFaltasElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                     RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                              && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                          && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasElegivel, QtElegivel, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - SMS_% Falta Paciente_Leitura B:
+      
+      VAR QtFaltasLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                              && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                          && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasLeitura, QtLeitura, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - SMS_% Falta Paciente_Sucesso B:
+      
+      VAR QtFaltasSucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                     RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                              && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR Qtsucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                          && RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasSucesso, Qtsucesso, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - SMS_Qt Consultas B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Consultas],
+              FILTER ( f_Mensageria, RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - SMS_Qt Disparo B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Disparo],
+              FILTER ( f_Mensageria, RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - SMS_Qt Elegivel B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Elegivel],
+              FILTER ( f_Mensageria, RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - SMS_Qt Leitura B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Leitura],
+              FILTER ( f_Mensageria, RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - SMS_Qt Sucesso B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Sucesso],
+              FILTER ( f_Mensageria, RELATED( Dim_TipoAcao[NOME_CANAL] ) = "SMS" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+      )
+    - SMS_Taxa Disparo B:
+      DIVIDE( [SMS_Qt Disparo B] , [SMS_Qt Elegivel B] )
+    - SMS_Taxa Elegível B:
+      DIVIDE( [SMS_Qt Elegivel B] , [SMS_Qt Consultas B] )
+    - SMS_Taxa Leitura B:
+      DIVIDE( [SMS_Qt Leitura B] , [SMS_Qt Sucesso B] )
+    - SMS_Taxa Sucesso B:
+      DIVIDE( [SMS_Qt Sucesso B] , [SMS_Qt Disparo B] )
+    - EMAIL_% Falta Paciente B:
+      
+      VAR QtFaltas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtEfetivadas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      f_Mensageria[STATUS_CONSULTA] = 1
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltas, QtFaltas + QtEfetivadas, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+    - EMAIL_Qt Elegivel B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Elegivel],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - EMAIL_% Falta Paciente_Disparo B:
+      
+      VAR QtFaltasDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasDisparo, QtDisparo, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - EMAIL_% Falta Paciente_Elegível B:
+      
+      VAR QtFaltasElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasElegivel, QtElegivel, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - EMAIL_% Falta Paciente_Leitura B:
+      
+      VAR QtFaltasLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO])= "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasLeitura, QtLeitura, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - EMAIL_% Falta Paciente_Sucesso B:
+      
+      VAR QtFaltasSucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR Qtsucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasSucesso, Qtsucesso, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - EMAIL_Qt Consultas B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Consultas],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - EMAIL_Qt Disparo B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Disparo],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL")
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - EMAIL_Qt Leitura B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Leitura],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - EMAIL_Qt Sucesso B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Sucesso],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "EMAIL" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - EMAIL_Taxa Disparo B:
+      DIVIDE( [EMAIL_Qt Disparo B] , [EMAIL_Qt Elegivel B] )
+    - EMAIL_Taxa Elegível B:
+      DIVIDE( [EMAIL_Qt Elegivel B] , [EMAIL_Qt Consultas B] )
+    - EMAIL_Taxa Leitura B:
+      DIVIDE( [EMAIL_Qt Leitura B] , [EMAIL_Qt Sucesso B] )
+    - EMAIL_Taxa Sucesso B:
+      DIVIDE( [EMAIL_Qt Sucesso B] , [EMAIL_Qt Disparo B] )
+    - Whats Variação Elegível:
+      DIVIDE( [Whats_Taxa Elegível B] , [Whats_Taxa Elegível]) -1
+    - Whats Variação Disparo:
+      DIVIDE( [Whats_Taxa Disparo B] , [Whats_Taxa Disparo]) -1
+    - Whats Variação Sucesso:
+      DIVIDE( [Whats_Taxa Sucesso B] , [Whats_Taxa Sucesso]) -1
+    - Whats Variação Leitura:
+      DIVIDE( [Whats_Taxa Leitura] , [Whats_Taxa Leitura B]) -1
+    - SMS Variação Disparo:
+      DIVIDE( [SMS_Taxa Disparo B] , [SMS_Taxa Disparo]) -1
+    - SMS Variação Elegivel:
+      DIVIDE( [SMS_Taxa Elegível B] , [SMS_Taxa Elegível]) -1
+    - SMS Variação Sucesso:
+      DIVIDE( [SMS_Taxa Sucesso B] , [SMS_Taxa Sucesso]) -1
+    - SMS Variação Leitura:
+      DIVIDE( [SMS_Taxa Leitura B] , [SMS_Taxa Leitura]) -1
+    - EMAIL Variação Elegivel:
+      DIVIDE( [EMAIL_Taxa Elegível B] , [EMAIL_Taxa Elegível]) -1
+    - EMAIL Variação Disparo:
+      DIVIDE( [EMAIL_Taxa Disparo B] , [EMAIL_Taxa Disparo]) -1
+    - EMAIL Variação Sucesso:
+      DIVIDE( [EMAIL_Taxa Sucesso B] , [EMAIL_Taxa Sucesso]) -1
+    - EMAIL Variação Leitura:
+      DIVIDE( [EMAIL_Taxa Leitura B] , [EMAIL_Taxa Leitura]) -1
+    - PUSH_Qt Elegivel:
+      
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          ))
+    - PUSH_Qt Consultas:
+      
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+    - PUSH_Qt Consultas B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Consultas],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - PUSH_Qt Elegivel B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Elegivel],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - PUSH_Qt Disparo:
+      
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+    - PUSH_Qt Disparo B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Disparo],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH")
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - PUSH_Qt Sucesso:
+      
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+    - PUSH_Qt Sucesso B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Sucesso],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - PUSH_Qt Leitura:
+      
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+    - PUSH_Qt Leitura B:
+      
+      CALCULATE (
+          CALCULATE (
+              [Qt Leitura],
+              FILTER ( f_Mensageria, RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH" )
+          ),
+          ALL ( Dim_Calendario ),
+          USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] ))
+    - PUSH_Taxa Elegível:
+      DIVIDE( [PUSH_Qt Elegivel] , [PUSH_Qt Consultas] )
+    - PUSH_Taxa Disparo:
+      DIVIDE( [PUSH_Qt Disparo] , [PUSH_Qt Elegivel] )
+    - PUSH_Taxa Sucesso:
+      DIVIDE( [PUSH_Qt Sucesso] , [PUSH_Qt Disparo] )
+    - PUSH_Taxa Leitura:
+      DIVIDE( [PUSH_Qt Leitura] , [PUSH_Qt Sucesso] )
+    - Push_% Falta Paciente:
+      
+      VAR QtFaltas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR QtEfetivadas = 
+      CALCULATE(
+          [Qt Consultas],
+          FILTER(
+              f_Mensageria,
+              f_Mensageria[STATUS_CONSULTA] = 1 &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltas, QtFaltas + QtEfetivadas, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Push_% Falta Paciente_Elegível:
+      
+      VAR QtFaltasElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS])  &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR QtElegivel = 
+      CALCULATE(
+          [Qt Elegivel],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_ELEGIVEIS]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasElegivel, QtElegivel, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Push_% Falta Paciente_Disparo:
+      
+      VAR QtFaltasDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_DISPARO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR QtDisparo = 
+      CALCULATE(
+          [Qt Disparo],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_DISPARO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasDisparo, QtDisparo, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Push_% Falta Paciente_Sucesso:
+      
+      VAR QtFaltasSucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR Qtsucesso = 
+      CALCULATE(
+          [Qt Sucesso],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_SUCESSO]) &&
+              RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasSucesso, Qtsucesso, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - Push_% Falta Paciente_Leitura:
+      
+      VAR QtFaltasLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE" &&
+              NOT ISBLANK(f_Mensageria[QT_LEITURA]) &&
+             RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR QtLeitura = 
+      CALCULATE(
+          [Qt Leitura],
+          FILTER(
+              f_Mensageria,
+              NOT ISBLANK(f_Mensageria[QT_LEITURA]) &&
+             RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+          )
+      )
+      VAR PercentFalta = 
+      DIVIDE(QtFaltasLeitura, QtLeitura, 0)
+      RETURN
+      IF ( ISBLANK(PercentFalta), 0, PercentFalta)
+    - PUSH_Taxa Disparo B:
+      DIVIDE( [PUSH_Qt Disparo B] , [PUSH_Qt Elegivel B] )
+    - PUSH_Taxa Elegível B:
+      DIVIDE( [PUSH_Qt Elegivel B] , [PUSH_Qt Consultas B] )
+    - PUSH_Taxa Leitura B:
+      DIVIDE( [PUSH_Qt Leitura B] , [PUSH_Qt Sucesso B] )
+    - PUSH_Taxa Sucesso B:
+      DIVIDE( [PUSH_Qt Sucesso B] , [PUSH_Qt Disparo B] )
+    - Push_% Falta Paciente B:
+      
+      VAR QtFaltas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtEfetivadas =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Consultas],
+                  FILTER (
+                      f_Mensageria,
+                      f_Mensageria[STATUS_CONSULTA] = 1
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltas, QtFaltas + QtEfetivadas, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+    - Push_% Falta Paciente_Elegível B:
+      
+      VAR QtFaltasElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtElegivel =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Elegivel],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_ELEGIVEIS] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasElegivel, QtElegivel, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Push_% Falta Paciente_Disparo B:
+      
+      VAR QtFaltasDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtDisparo =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Disparo],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_DISPARO] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasDisparo, QtDisparo, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Push_% Falta Paciente_Sucesso B:
+      
+      VAR QtFaltasSucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO]) = "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR Qtsucesso =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Sucesso],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_SUCESSO] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasSucesso, Qtsucesso, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - Push_% Falta Paciente_Leitura B:
+      
+      VAR QtFaltasLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      RELATED(Dim_GrupoCancelamento[GRUPO])= "FALTA PACIENTE"
+                          && NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                              && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR QtLeitura =
+          CALCULATE (
+              CALCULATE (
+                  [Qt Leitura],
+                  FILTER (
+                      f_Mensageria,
+                      NOT ISBLANK ( f_Mensageria[QT_LEITURA] )
+                          && RELATED(Dim_TipoAcao[NOME_CANAL]) = "PUSH"
+                  )
+              ),
+              ALL ( Dim_Calendario ),
+              USERELATIONSHIP ( Dim_Calendario[Date], Dim_Calendario2[Date] )
+          )
+      VAR PercentFalta =
+          DIVIDE ( QtFaltasLeitura, QtLeitura, 0 )
+      RETURN
+          IF ( ISBLANK ( PercentFalta ), 0, PercentFalta )
+      
+    - PUSH Variação Elegivel:
+      DIVIDE( [PUSH_Taxa Elegível B] , [PUSH_Taxa Elegível]) -1
+    - PUSH Variação Disparo:
+      DIVIDE( [PUSH_Taxa Disparo B] , [PUSH_Taxa Disparo]) -1
+    - PUSH Variação Sucesso:
+      DIVIDE( [PUSH_Taxa Sucesso B] , [PUSH_Taxa Sucesso]) -1
+    - PUSH Variação Leitura:
+      DIVIDE( [PUSH_Taxa Leitura B] , [PUSH_Taxa Leitura]) -1
+----------------------------------------
+Tabela: Dim_Calendario2
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Ano-Mes [string]
+    - Mes-Ano [string]
+    - Classif_MesAno [int64]
+    - Nome do Mês Abrev [string]
+    - Nome do Mês Completo [string]
+    - Dia da Semana Abrev [string]
+    - Dia da Semana Completo [string]
+    - Semana-Ano [int64]
+----------------------------------------
+Tabela: Dim_GrupoCancelamento
+  Colunas:
+    - GRUPO [string]
+    - CD_GRUPO_CANCELAMENTO [int64]
+----------------------------------------
+Tabela: Dim_Regua
+  Colunas:
+    - REGUA [string]
+    - CD_REGUA [int64]
+----------------------------------------
+Tabela: Dim_Classificacao
+  Colunas:
+    - TIPO [string]
+    - CD_TIPO [int64]
+----------------------------------------
+Tabela: Dim_TipoAcao
+  Colunas:
+    - TIPO_ACAO [string]
+    - CD_TIPO_ACAO [int64]
+    - NOME_CANAL [string]
+    - NOME_ACAO [string]
+----------------------------------------
+Tabela: Dim_Cidade
+  Colunas:
+    - COD_UNIDADE [int64]
+    - NM_FANTASIA [string]
+    - NM_CIDADE [string]
+    - COD_FILIAL [int64]
+    - NM_FILIAL [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - REGIONAL [string]
+----------------------------------------
+Tabela: Dim_especialidade
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+----------------------------------------
+Tabela: Atualizacao
+  Colunas:
+    - Atualizacao [dateTime]
+  Medidas DAX (Regras de Negócio):
+    - Atualizado:
+      "Atualizado em : " & SELECTEDVALUE(Atualizacao[Atualizacao]) & UNICHAR(10) & "com informações até: " & MAX(f_Mensageria[DT_CONSULTA])
+----------------------------------------
+Tabela: Tabela
+  Colunas:
+    - CD_TIPO_ACAO [int64]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+Dim_Calendario2[Date] ---> Dim_Calendario[Date]
+f_Mensageria[TIPO] ---> Dim_Classificacao[CD_TIPO]
+f_Mensageria[COD_UNIDADE] ---> Dim_Cidade[COD_UNIDADE]
+f_Mensageria[TIPO_CANCELAMENTO] ---> Dim_GrupoCancelamento[CD_GRUPO_CANCELAMENTO]
+f_Mensageria[DT_CONSULTA] ---> Dim_Calendario[Date]
+f_Mensageria[CD_ESPECIALIDADE] ---> Dim_especialidade[CD_ESPECIALIDADE]
+f_Mensageria[LEGENDA_TIPO_ACAO] ---> Dim_TipoAcao[CD_TIPO_ACAO]
+f_Mensageria[TIPO_REGUA] ---> Dim_Regua[CD_REGUA]

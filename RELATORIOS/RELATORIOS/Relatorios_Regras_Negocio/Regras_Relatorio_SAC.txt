@@ -1,0 +1,156 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatorio_SAC.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: DIM_CALENDARIO
+  Colunas:
+    - Date [dateTime]
+    - MES-ANO [string]
+    - NOME_MES-ANO [string]
+    - NUM_MES [string]
+    - ANO [int64]
+----------------------------------------
+Tabela: MEDIDAS
+  Colunas:
+    - Column [int64]
+  Medidas DAX (Regras de Negócio):
+    - QTD_SAC_TOTAL:
+      IF(
+          SUM(FATO_UNIFICADA[SAC_GERAL]) = BLANK(), 0,
+           SUM(FATO_UNIFICADA[SAC_GERAL])
+           ) 
+    - QTD_SAC_REDE_CRED:
+      
+      IF(
+          SUM(FATO_UNIFICADA[SAC_RC]) = BLANK(),0,
+          SUM(FATO_UNIFICADA[SAC_RC])  
+      )
+      
+    - QTD_SAC_REDE_PROPRIA:
+      
+      IF(
+          SUM(FATO_UNIFICADA[SAC_RP]) = BLANK(),0,
+          SUM(FATO_UNIFICADA[SAC_RP])
+      )
+      
+    - (%) SAC_RPR:
+      IFERROR(DIVIDE([QTD_SAC_REDE_PROPRIA],[QTD_SAC_TOTAL]),0)
+    - (%) SAC_CRED:
+      IFERROR(DIVIDE([QTD_SAC_REDE_CRED],[QTD_SAC_TOTAL]),0)
+    - TESTE:
+      
+      
+      VAR DIA = DAY(EOMONTH(TODAY()-1,0))
+      VAR MES = MONTH(EOMONTH(TODAY()-1,0))
+      
+      RETURN
+      
+      MES
+    - Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+    - Data e Hora Atual:
+      
+      NOW() - TIME(3,0,0)
+    - % SAC:
+      
+      VAR TotalMes =
+          CALCULATE(
+              [QTD_SAC_TOTAL],
+              ALL('FATO_UNIFICADA'[TIPO_REDE_ATENDIMENTO])
+          )
+      RETURN
+      DIVIDE(
+          [QTD_SAC_TOTAL],
+          TotalMes,
+          0
+      )
+----------------------------------------
+Tabela: DIM_CALENDARIO_RESUMIDA
+  Colunas:
+    - MES-ANO [string]
+    - NOME_MES-ANO [string]
+    - MIN_DATA [dateTime]
+    - NUM_MES [string]
+    - ANO [int64]
+----------------------------------------
+Tabela: FATO_SAC_ULT_6_MESES
+  Colunas:
+    - ANO [int64]
+    - MES_ANO [string]
+    - CD_ESPECIALIDADE [int64]
+    - ESPECIALIDADE [string]
+    - FILIAL [string]
+    - UF_BENEFICIARIO [string]
+    - CIDADE [string]
+    - SEGMENTO_ATENDIMENTO [string]
+    - TIPO_SAC [string]
+    - TIPO_REDE_ATENDIMENTO [string]
+    - DS_ASSUNTO [string]
+    - OPERADORA_BENEFICIARIO [string]
+    - SAC_GERAL [int64]
+    - CHAVE [string]
+----------------------------------------
+Tabela: FATO_SAC_MES_ATUAL
+  Colunas:
+    - ANO [int64]
+    - MES_ANO [string]
+    - CD_ESPECIALIDADE [int64]
+    - ESPECIALIDADE [string]
+    - FILIAL [string]
+    - UF_BENEFICIARIO [string]
+    - CIDADE [string]
+    - SEGMENTO_ATENDIMENTO [string]
+    - TIPO_SAC [string]
+    - TIPO_REDE_ATENDIMENTO [string]
+    - DS_ASSUNTO [string]
+    - OPERADORA_BENEFICIARIO [string]
+    - SAC_GERAL [int64]
+    - CHAVE [string]
+----------------------------------------
+Tabela: FATO_UNIFICADA
+  Colunas:
+    - ANO [int64]
+    - MES_ANO [string]
+    - CD_ESPECIALIDADE [int64]
+    - ESPECIALIDADE [string]
+    - FILIAL [string]
+    - UF_BENEFICIARIO [string]
+    - CIDADE [string]
+    - SEGMENTO_ATENDIMENTO [string]
+    - TIPO_SAC [string]
+    - TIPO_REDE_ATENDIMENTO [string]
+    - DS_ASSUNTO [string]
+    - OPERADORA_BENEFICIARIO [string]
+    - SAC_GERAL [int64]
+    - CHAVE [string]
+    - SAC_RP [int64] (Calculada)
+    - SAC_RC [int64] (Calculada)
+----------------------------------------
+Tabela: DATA_ATUALIZAÇÃO
+  Colunas:
+    - DATA_ATUALIZAÇÃO [dateTime]
+----------------------------------------
+Tabela: Tipo SAC
+  Colunas:
+    - Tipo [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+DIM_CALENDARIO_RESUMIDA[MIN_DATA] ---> LocalDateTable_7e9e24c3-69d5-4b93-8959-dc2fa6f1ab94[Date]
+DIM_CALENDARIO[Date] ---> LocalDateTable_b22e04cc-a1a4-49d7-b1b5-ab6a9e012c30[Date]
+FATO_UNIFICADA[MES_ANO] ---> DIM_CALENDARIO_RESUMIDA[MES-ANO]
+DATA_ATUALIZAÇÃO[DATA_ATUALIZAÇÃO] ---> LocalDateTable_d02899d8-dca2-44da-ba7f-44edca84e7df[Date]

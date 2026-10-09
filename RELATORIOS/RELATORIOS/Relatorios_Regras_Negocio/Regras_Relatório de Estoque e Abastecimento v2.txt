@@ -1,0 +1,1200 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatório de Estoque e Abastecimento v2.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: fAtual
+  Colunas:
+    - CD_LOCAL [string]
+    - CD_ESPECIALIDADE [int64]
+    - DT_AGENDA [dateTime]
+    - QT DISP [int64]
+    - QT MARC [int64]
+    - META HAP [int64]
+    - META ANS [int64]
+    - BASICA HAP [int64]
+    - BASICA ANS [int64]
+    - DX [int64]
+    - DIAS_VALIDOS_ANS [int64]
+    - DIAS_VALIDOS_HAP [int64]
+    - Chave_Cidade_Especialidade [string] (Calculada)
+    - ChaveDiretoria [string] (Calculada)
+    - ID [string]
+----------------------------------------
+Tabela: dEspecialidade
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - NM_ESPECIALIDADE [string]
+    - BASICA HAP [int64]
+    - BASICA ANS [int64]
+----------------------------------------
+Tabela: dCidade
+  Colunas:
+    - COD_UNIDADE [string]
+    - NM_FANTASIA [string]
+    - NM_CIDADE [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - REGIONAL [string]
+    - TIPO [string]
+    - NM_FILIAL [string]
+    - LOCALIZAÇÃO [string]
+    - POLO [string]
+    - CD_LOCALIDADE [string]
+    - ID [string]
+    - REGIAO BRASIL [string]
+    - CD_TIPO [int64]
+    - CD_ESPECIALIDADE [int64]
+    - EXECUTIVO [string]
+    - DIRETOR [string]
+    - SUB REGIAO [string]
+    - CD_CIDADE_IBGE [string]
+----------------------------------------
+Tabela: #MEDIDAS
+  Medidas DAX (Regras de Negócio):
+    - Qtde Registros:
+      COUNTROWS( fAtual ) 
+    - Qtde Disp Calend:
+      
+      CALCULATE(
+          SUM( fAtual[QT DISP] ),
+          FILTER(
+              fAtual,
+              fAtual[DX] = 1
+          )
+      )
+    - Qtde Marc Calend:
+      
+      CALCULATE(
+          SUM( fAtual[QT MARC] ),
+          FILTER(
+              fAtual,
+              fAtual[DX] = 1
+          )
+      )
+    - Calendario SVG:
+      
+      
+      VAR vDia = SELECTEDVALUE(dCalendario[Dia])
+      VAR vDisp = [Qtde Disp Calend]
+      VAR vMarc = [Qtde Marc Calend]
+      VAR vLivre = [Vagas Prazo Ans Teste]
+      VAR vPerc = DIVIDE(vLivre, vDisp, 0)
+      VAR vPercFormat = FORMAT(vPerc, "0.0%")
+      
+      --  Verificar se é o dia atual
+      VAR isToday = vDia = DAY(TODAY())
+      
+      --  Verificar se deve aplicar opacidade (disponibilizadas e marcadas = 0)
+      VAR shouldFade = vDisp = 0 && vMarc = 0
+      VAR opacityValue = IF(shouldFade, "0.4", "1")
+      
+      --  Paleta de cores
+      VAR corFundo = "#F8FAFC"
+      VAR corBorda = 
+          SWITCH(
+              TRUE(),
+              isToday, "#F59E0B", 
+              "#E2E8F0"
+          )
+      VAR corTitulo = "#0F172A"
+      VAR corSub = "#475569"
+      VAR corDisp = "#3B82F6"
+      VAR corMarc = "#6B7280"
+      VAR corLivre = 
+          SWITCH(
+              TRUE(),
+              vPerc <= 0.025, "#D3321D",
+              vPerc <= 0.030, "#F4D941",
+              "#30C67C"
+          )
+      VAR corAnelFundo = "#F1F5F9"
+      
+      --  Círculo de progresso - 
+      VAR raio = 35
+      VAR circ = 2 * PI() * raio
+      -- CORREÇÃO: Calcular o comprimento visível do círculo
+      VAR comprimentoVisivel = circ * vPerc
+      VAR comprimentoInvisivel = circ - comprimentoVisivel
+      
+      --  Definir gradiente baseado no percentual
+      VAR gradienteId = 
+          SWITCH(
+              TRUE(),
+              vPerc <= 0.025, "gradVermelho",
+              vPerc <= 0.030, "gradAmarelo",
+              "gradVerde"
+          )
+      
+      RETURN
+      "
+      data:image/svg+xml;utf8," &
+      "<svg width='250' height='250' viewBox='0 0 260 260' xmlns='http://www.w3.org/2000/svg'>
+      
+        <!-- Fundo e sombra sutil -->
+        <defs>
+          <filter id='cardShadow' x='-10%' y='-10%' width='130%' height='130%'>
+            <feDropShadow dx='0' dy='2' stdDeviation='2' flood-color='#000000' flood-opacity='0.05'/>
+          </filter>
+      
+          <!-- Gradiente Vermelho (0% - 2.5%) -->
+          <linearGradient id='gradVermelho' x1='0%' y1='0%' x2='100%' y2='100%'>
+            <stop offset='0%' stop-color='#F36364'/>
+            <stop offset='100%' stop-color='#F9B16E'/>
+          </linearGradient>
+      
+          <!-- Gradiente Amarelo (2.5% - 4%) -->
+          <linearGradient id='gradAmarelo' x1='0%' y1='0%' x2='100%' y2='100%'>
+            <stop offset='0%' stop-color='#F4D941'/>
+            <stop offset='100%' stop-color='#EC8235'/>
+          </linearGradient>
+      
+          <!-- Gradiente Verde (acima de 4%) -->
+          <linearGradient id='gradVerde' x1='0%' y1='0%' x2='100%' y2='100%'>
+            <stop offset='0%' stop-color='#30C67C'/>
+            <stop offset='100%' stop-color='#82F4B1'/>
+          </linearGradient>
+        </defs>
+      
+        <!-- Grupo principal com opacidade condicional -->
+        <g opacity='" & opacityValue & "'>
+      
+          <!-- Cartão com fundo suave e borda MAIS GROSSA para dia atual -->
+          <rect x='5' y='5' width='250' height='250' rx='16' fill='" & corFundo & "' stroke='" & corBorda & "' stroke-width='" & IF(isToday, "8", "2") & "' filter='url(#cardShadow)'/>
+      
+          <!-- Dia (número grande) -->
+          <text x='35' y='65'
+                font-family='Segoe UI, Inter, system-ui'
+                font-size='45'
+                font-weight='700'
+                fill='" & corTitulo & "'>" &
+                vDia & "</text>
+      
+          <!-- Círculo de progresso com degradê dinâmico -->
+          <g transform='translate(185,70)'>
+            <!-- Círculo de fundo (sempre completo) -->
+            <circle r='" & raio & "' stroke='" & corAnelFundo & "' stroke-width='10' fill='none'/>
+            
+            <!-- Círculo de progresso (dinâmico) -->
+            " & IF(vPerc > 0, 
+            "<circle r='" & raio & "'
+                    stroke='url(#" & gradienteId & ")'
+                    stroke-width='10'
+                    fill='none'
+                    stroke-linecap='round'
+                    stroke-dasharray='" & comprimentoVisivel & " " & comprimentoInvisivel & "'
+                    transform='rotate(-90)'/>",
+            "") & "
+            
+            <!-- Texto do percentual -->
+            <text y='4'
+                  text-anchor='middle'
+                  font-family='Segoe UI, Inter, system-ui'
+                  font-size='16'
+                  font-weight='700'
+                  fill='" & corLivre & "'>" & vPercFormat & "</text>
+            <text y='22'
+                  text-anchor='middle'
+                  font-family='Segoe UI, Inter, system-ui'
+                  font-size='11'
+                  font-weight='500'
+                  fill='" & corSub & "'>Vagas</text>
+          </g>
+      
+          <!-- Linha divisória superior -->
+          <line x1='30' y1='125' x2='230' y2='125' stroke='" & corBorda & "' stroke-width='1.5' opacity='0.8'/>
+      
+          <!-- Indicadores -->
+          <g transform='translate(30,150)'>
+      
+            <!-- Disponibilizadas -->
+            <circle cx='8' cy='0' r='6' fill='" & corDisp & "'/>
+            <text x='28' y='4'
+                  font-family='Segoe UI, Inter, system-ui'
+                  font-size='16'
+                  font-weight='500'
+                  fill='" & corSub & "'>Disponib.</text>
+            <text x='195' y='4'
+                  text-anchor='end'
+                  font-family='Segoe UI, Inter, system-ui'
+                  font-size='16'
+                  font-weight='700'
+                  fill='" & corTitulo & "'>" &
+                  FORMAT(vDisp, "#,0") & "</text>
+      
+            <!-- Linha separadora -->
+            <line x1='0' y1='18' x2='195' y2='18' stroke='" & corBorda & "' stroke-width='1.2' opacity='0.7'/>
+      
+            <!-- Marcadas -->
+            <g transform='translate(0,35)'>
+              <circle cx='8' cy='0' r='6' fill='" & corMarc & "'/>
+              <text x='28' y='4'
+                    font-family='Segoe UI, Inter, system-ui'
+                    font-size='16'
+                    font-weight='500'
+                    fill='" & corSub & "'>Marcadas</text>
+              <text x='195' y='4'
+                    text-anchor='end'
+                    font-family='Segoe UI, Inter, system-ui'
+                    font-size='16'
+                    font-weight='700'
+                    fill='" & corTitulo & "'>" &
+                    FORMAT(vMarc, "#,0") & "</text>
+            </g>
+      
+            <!-- Linha separadora -->
+            <line x1='0' y1='53' x2='195' y2='53' stroke='" & corBorda & "' stroke-width='1.2' opacity='0.7'/>
+      
+            <!-- Vagas -->
+            <g transform='translate(0,70)'>
+              <circle cx='8' cy='0' r='6' fill='" & corLivre & "'/>
+              <text x='28' y='4'
+                    font-family='Segoe UI, Inter, system-ui'
+                    font-size='16'
+                    font-weight='500'
+                    fill='" & corSub & "'>Vagas</text>
+              <text x='195' y='4'
+                    text-anchor='end'
+                    font-family='Segoe UI, Inter, system-ui'
+                    font-size='16'
+                    font-weight='700'
+                    fill='" & corLivre & "'>" &
+                    FORMAT(vLivre, "#,0") & "</text>
+            </g>
+      
+          </g>
+      
+        </g>
+      </svg>
+      
+      "
+    - Qtde Livre Calend:
+      
+      VAR vVagas = [Qtde Disp Calend] - [Qtde Marc Calend]
+      RETURN
+      IF ( vVagas < 0 , 0 , vVagas ) 
+    - Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+      
+      
+    - Disponib. Prazo Hap:
+      
+      CALCULATE(
+          SUM( fAtual[QT DISP] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_HAP] = 1 ,
+          fAtual[DX] = 1
+      )
+    - Marcadas Prazo Hap:
+      
+      CALCULATE(
+          SUM( fAtual[QT MARC] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_HAP] = 1 ,
+          fAtual[DX] = 1
+      )
+    - Vagas Prazo Hap:
+      
+      SUMX(
+          FILTER(
+              CALCULATETABLE(
+                  fAtual,
+                  ALL(dCalendario) -- Remove os filtros aplicados à dCalendario
+              ),
+              fAtual[DIAS_VALIDOS_HAP] = 1 &&
+              fAtual[DX] = 1
+          ),
+          MAX(fAtual[QT DISP] - fAtual[QT MARC], 0)
+      )
+    - % Vagas Prazo Hap:
+      
+      DIVIDE([Vagas Prazo Hap], [Disponib. Prazo Hap], 0)
+      
+      
+    - Disponib. Prazo Ans:
+      
+      CALCULATE(
+          SUM( fAtual[QT DISP] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_ANS] = 1 ,
+          fAtual[DX] = 1
+      )
+    - Marcadas Prazo Ans:
+      
+      CALCULATE(
+          SUM( fAtual[QT MARC] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_ANS] = 1 ,
+          fAtual[DX] = 1
+      )
+    - Vagas Prazo Ans:
+      
+      SUMX(
+          FILTER(
+              CALCULATETABLE(
+                  fAtual,
+                  ALL(dCalendario) -- Remove os filtros aplicados à dCalendario
+              ),
+              fAtual[DIAS_VALIDOS_ANS] = 1 &&
+              fAtual[DX] = 1
+          ),
+          MAX(fAtual[QT DISP] - fAtual[QT MARC], 0)
+      )
+    - % Vagas Prazo Ans:
+      
+      DIVIDE([Vagas Prazo Ans], [Disponib. Prazo Ans])
+    - Disponib. Prazo Ans D0:
+      
+      CALCULATE(
+          SUM( fAtual[QT DISP] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_ANS] = 1 ,
+          fAtual[DX] = 0
+      )
+    - Disponib. Prazo Hap D0:
+      
+      CALCULATE(
+          SUM( fAtual[QT DISP] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_HAP] = 1 ,
+          fAtual[DX] = 0
+      )
+    - Marcadas Prazo Ans D0:
+      
+      CALCULATE(
+          SUM( fAtual[QT MARC] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_ANS] = 1 ,
+          fAtual[DX] = 0
+      )
+    - Marcadas Prazo Hap D0:
+      
+      CALCULATE(
+          SUM( fAtual[QT MARC] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_HAP] = 1 ,
+          fAtual[DX] = 0
+      )
+    - Vagas Prazo Ans D0:
+      
+      SUMX(
+          FILTER(
+              CALCULATETABLE(
+                  fAtual,
+                  ALL(dCalendario) -- Remove os filtros aplicados à dCalendario
+              ),
+              fAtual[DIAS_VALIDOS_ANS] = 1 &&
+              fAtual[DX] = 0
+          ),
+          MAX(fAtual[QT DISP] - fAtual[QT MARC], 0)
+      )
+    - Vagas Prazo Hap D0:
+      
+      SUMX(
+          FILTER(
+              CALCULATETABLE(
+                  fAtual,
+                  ALL(dCalendario) -- Remove os filtros aplicados à dCalendario
+              ),
+              fAtual[DIAS_VALIDOS_HAP] = 1 &&
+              fAtual[DX] = 0
+          ),
+          MAX(fAtual[QT DISP] - fAtual[QT MARC], 0)
+      )
+    - % Vagas Prazo Hap D0:
+      
+      DIVIDE([Vagas Prazo Hap D0], [Disponib. Prazo Hap D0])
+    - Titulo Calendario:
+      
+      VAR vSelecionarMes = SELECTEDVALUE(dCalendario[Mes_Ano]) 
+      RETURN 
+      "Calendário " & vSelecionarMes
+    - % Vagas Prazo Ans D0:
+      
+      DIVIDE([Vagas Prazo Ans D0], [Disponib. Prazo Ans D0])
+    - Qtde Disp. ANS:
+      
+      CALCULATE(
+          SUM( fAtual[QT DISP] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_ANS] = 1
+      )
+    - Qtde Marc. ANS:
+      
+      CALCULATE(
+          SUM( fAtual[QT MARC] ) ,
+          ALL(dCalendario),
+          fAtual[DIAS_VALIDOS_ANS] = 1
+      )
+    - Qtde Vagas ANS:
+      
+      CALCULATE(
+          SUMX(
+              FILTER(
+                  fAtual,
+                  fAtual[DIAS_VALIDOS_ANS] = 1
+              ),
+              MAX(fAtual[QT DISP] - fAtual[QT MARC], 0)
+          )
+      )
+    - Perc. Vagas:
+      DIVIDE( [Qtde Vagas ANS] , [Qtde Disp. ANS], 0)
+    - GAP 2,5%:
+      
+      VAR QtVagas = [Qtde Vagas ANS]
+      VAR QtMarc = [Qtde Marc. ANS]
+      RETURN
+      IF(
+          NOT ISBLANK(QtVagas) && NOT ISBLANK(QtMarc),
+          0.025 - [Perc. Vagas],
+          BLANK()
+      )
+    - GAP Vagas:
+      
+      VAR QtVagas = [Qtde Vagas ANS]
+      VAR QtMarc = [Qtde Marc. ANS]
+      RETURN
+      IF(
+          NOT ISBLANK(QtVagas) && NOT ISBLANK(QtMarc),
+          (0.025 * [Qtde Disp. ANS]) - [Qtde Vagas ANS],
+          BLANK()
+      )
+    - Dia Prox Vagas:
+      
+      VAR DateInicial = 
+          CALCULATE(
+              MIN(fAtual[DT_AGENDA]),
+              fAtual[DIAS_VALIDOS_ANS] = 1
+          )
+      RETURN
+      MINX(
+          FILTER(
+              dCalendario,
+              dCalendario[Date] >= DateInicial &&
+              CALCULATE(
+                  SUM(fAtual[QT DISP]) - SUM(fAtual[QT MARC])
+              ) > 0
+          ),
+          dCalendario[Date]
+      )
+      
+      
+      
+    - Qtde Vagas Tele ANS:
+      
+      VAR QtVagas = [Qtde Vagas ANS]
+      VAR QtMarc = [Qtde Marc. ANS]
+      VAR QtVagasTele = 1
+      RETURN
+      IF(
+          NOT ISBLANK(QtVagas) && NOT ISBLANK(QtMarc),
+          CALCULATE(
+              SUMX(
+                  FILTER(
+                      fAtual,
+                      fAtual[DIAS_VALIDOS_ANS] = 1
+                  ),
+                  MAX(fAtual[QT DISP] - fAtual[QT MARC], 0)
+              ),
+              dCidade[COD_UNIDADE] = "127304670",
+              REMOVEFILTERS(dCidade[TIPO]),
+              REMOVEFILTERS(dCidade[UF]),
+              REMOVEFILTERS(dCidade[NM_FILIAL]),
+              REMOVEFILTERS(dCidade[NM_CIDADE]),
+              REMOVEFILTERS(dCidade[NM_FANTASIA]),
+              REMOVEFILTERS(dCidade[SUB REGIAO]),
+              REMOVEFILTERS(dCidade[DIRETOR]),
+              REMOVEFILTERS(dCidade[EXECUTIVO])
+          ),
+          BLANK()
+      )
+    - Abastecido:
+      
+      VAR QtVagas = [Qtde Vagas ANS]
+      VAR QtMarc = [Qtde Marc. ANS]
+      VAR Resultado = 
+      IF ( [Qtde Vagas Tele ANS] >= 12 , "SIM" , IF( [Perc. Vagas] <= 0.025 , "NÃO", "SIM"))
+      RETURN
+      IF(
+          NOT ISBLANK(QtVagas) && NOT ISBLANK(QtMarc),
+          Resultado,
+          BLANK()
+      )
+    - Atualizado em:
+      
+       VAR vDataAtualizacao = SELECTEDVALUE(ATUALIZACAO[ATUALIZACAO])
+       RETURN
+       "Atualizado em: " & vDataAtualizacao
+    - Qt Vagas Hap Manhã Hist:
+      
+      CALCULATE(
+          SUM(fHistorico[QT_SALDO_HAP]),
+          FILTER(
+              fHistorico,
+              fHistorico[CLASSIF_HORA] = MIN(fHistorico[CLASSIF_HORA]) &&
+              fHistorico[CLASSIF_HORA] < 12
+          )
+      )
+      
+    - Qt Vagas Hap Tarde Hist:
+      
+      CALCULATE(
+          SUM(fHistorico[QT_SALDO_HAP]),
+          FILTER(
+              fHistorico,
+              fHistorico[CLASSIF_HORA] = MAX(fHistorico[CLASSIF_HORA]) &&
+              fHistorico[CLASSIF_HORA] > 12
+          )
+      )
+    - Qt Registros Hist:
+      COUNTROWS(fHistorico)
+    - Qt Vagas Ans Manhã Hist:
+      
+      CALCULATE(
+          SUM(fHistorico[QT_SALDO_ANS]),
+          FILTER(
+              fHistorico,
+              fHistorico[CLASSIF_HORA] = MIN(fHistorico[CLASSIF_HORA]) &&
+              fHistorico[CLASSIF_HORA] < 12
+          )
+      )
+      
+    - Qt Vagas Ans Tarde Hist:
+      
+      CALCULATE(
+          SUM(fHistorico[QT_SALDO_ANS]),
+          FILTER(
+              fHistorico,
+              fHistorico[CLASSIF_HORA] = MAX(fHistorico[CLASSIF_HORA]) &&
+              fHistorico[CLASSIF_HORA] > 12
+          )
+      )
+    - Qt Vagas 7D:
+      SUM(fHistorico[QT_SALDO_7D])
+    - Qt Vagas 14D:
+      SUM(fHistorico[QT_SALDO_14D])
+    - Qt Vagas 21D:
+      SUM(fHistorico[QT_SALDO_21D])
+    - %Vagas 7D:
+      
+      VAR _QtDisp7D = SUM(fHistorico[QT_DISP_7D])
+      VAR _QtVagas7D = SUM(fHistorico[QT_SALDO_7D])
+      RETURN
+      DIVIDE( _QtVagas7D , _QtDisp7D)
+    - %Vagas 14D:
+      
+      VAR _QtDisp14D = SUM(fHistorico[QT_DISP_14D])
+      VAR _QtVagas14D = SUM(fHistorico[QT_SALDO_14D])
+      RETURN
+      DIVIDE( _QtVagas14D , _QtDisp14D)
+    - %Vagas 21D:
+      
+      VAR _QtDisp21D = SUM(fHistorico[QT_DISP_21D])
+      VAR _QtVagas21D = SUM(fHistorico[QT_SALDO_21D])
+      RETURN
+      DIVIDE( _QtVagas21D , _QtDisp21D)
+    - % Dif 14D vs 21D:
+      
+      VAR _Vagas21D = [Qt Vagas 21D]
+      VAR _Vagas14D = [Qt Vagas 14D]
+      VAR _Diferenca = _Vagas21D - _Vagas14D
+      RETURN
+      DIVIDE( _Diferenca , _Vagas21D ) 
+      
+    - % Dif 7D vs 14D:
+      
+      VAR _Vagas14D = [Qt Vagas 14D]
+      VAR _Vagas7D = [Qt Vagas 7D]
+      VAR _Diferenca = _Vagas14D - _Vagas7D
+      RETURN
+      DIVIDE( _Diferenca , _Vagas14D ) 
+    - Text Meta Hap:
+      
+      VAR EspecialidadeSelecionada = SELECTEDVALUE(dEspecialidade[CD_ESPECIALIDADE])
+      VAR _vValorMeta = 
+          CALCULATE(
+              MAX(fAtual[META HAP]),
+              fAtual[CD_ESPECIALIDADE] = EspecialidadeSelecionada
+          )
+      RETURN
+      IF(
+          ISBLANK(_vValorMeta),
+          " ",
+          "A especialidade tem prazo de " & _vValorMeta & " dias úteis."
+      )
+      
+      
+    - Text Meta Ans:
+      
+      VAR EspecialidadeSelecionada = SELECTEDVALUE(dEspecialidade[CD_ESPECIALIDADE])
+      VAR _vValorMeta = 
+          CALCULATE(
+              MAX(fAtual[META ANS]),
+              fAtual[CD_ESPECIALIDADE] = EspecialidadeSelecionada
+          )
+      RETURN
+      IF(
+          ISBLANK(_vValorMeta),
+          " ",
+          "A especialidade tem prazo de " & _vValorMeta & " dias úteis."
+      )
+      
+      
+    - Format Titulo Hap:
+      
+      VAR _vPercentualVagas = [% Vagas Prazo Hap]
+      RETURN
+      IF ( _vPercentualVagas < 0.025 , "❌" , "✅" )
+    - Medida:
+      0.025
+    - Format Titulo Ans:
+      
+      VAR _vPercentualVagas = [% Vagas Prazo Ans]
+      RETURN
+      IF ( _vPercentualVagas < 0.025 , "❌" , "✅" )
+    - Qt Vagas Hap:
+      SUM(fHistorico[QT_SALDO_HAP])
+    - Qt Vagas Ans:
+      SUM(fHistorico[QT_SALDO_ANS])
+    - %Vagas Hap:
+      
+      VAR _QtDispHap = SUM(fHistorico[QT_DISP_HAP])
+      VAR _QtVagasHap = SUM(fHistorico[QT_SALDO_HAP])
+      RETURN
+      DIVIDE( _QtVagasHap , _QtDispHap)
+    - %Vagas Ans:
+      
+      VAR _QtDispAns = SUM(fHistorico[QT_DISP_ANS])
+      VAR _QtVagasAns = SUM(fHistorico[QT_SALDO_ANS])
+      RETURN
+      DIVIDE( _QtVagasAns , _QtDispAns)
+    - Qt Vagas D3 Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN 
+          CALCULATE(
+              SUM(fHistorico[QT_SALDO_D3]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+      
+      
+    - Qt Vagas D2 Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN 
+          CALCULATE(
+              SUM(fHistorico[QT_SALDO_D2]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+      
+    - Qt Vagas Hap Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN 
+          CALCULATE(
+              SUM(fHistorico[QT_SALDO_HAP]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+      
+    - Qt Vagas Ans Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN 
+          CALCULATE(
+              SUM(fHistorico[QT_SALDO_ANS]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+      
+    - Qt Disp Ans Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN
+          CALCULATE(
+              SUM(fHistorico[QT_DISP_ANS]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+      
+    - %Vagas Ans Atual:
+      
+      VAR _vVagasAtual = [Qt Vagas Ans Atual]
+      VAR _vDispAtual = [Qt Disp Ans Atual]
+      RETURN
+      DIVIDE( _vVagasAtual , _vDispAtual, 0 )
+    - Cenário:
+      
+      VAR _vDisp = [Qt Disp Ans Atual]
+      VAR _vANS = [Qt Vagas Ans Atual] 
+      VAR _vD2 = [Qt Vagas D2 Atual]
+      VAR _vD3 = [Qt Vagas D3 Atual]
+      var _Per = [%Vagas Ans Atual]
+      VAR _Resultado = 
+      SWITCH (
+          TRUE(),
+          _vANS = 0 && _vD2 = 0 && _vD3 = 0, "Crítico",
+          _vANS >= 0 && _vD2 >= _vANS && _vD3 >= _vD2, "Melhorando",
+          _vANS > 0 && _vD2 < _vANS && _vD3 < _vD2, "Atenção",
+          "Ótima oferta"
+      )
+      RETURN
+      
+      IF( 
+          ISBLANK(_Per),
+          BLANK(),
+          _Resultado
+      )
+    - Qtde Cons. Disponibilizadas:
+      SUM(fEstoque[Qtde Disponib.])
+    - Qtde Cons. Marcadas:
+      SUM(fEstoque[Qtde Marcadas])
+    - Qtde Saldo:
+      IF ([Qtde Cons. Disponibilizadas] - [Qtde Cons. Marcadas] < 0, 0 , [Qtde Cons. Disponibilizadas] - [Qtde Cons. Marcadas])
+    - Total Registros:
+      COUNTROWS(fEstoque)
+    - Qtde Saldo Mensal:
+      
+      SUMX(
+          fEstoque,
+          IF(fEstoque[Qtde Disponib.] >= fEstoque[Qtde Marcadas], fEstoque[Qtde Disponib.] - fEstoque[Qtde Marcadas], 0)
+      )
+      
+      
+    - Teste:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN
+      UltimaData
+    - Vagas Prazo Ans Teste:
+      
+      SUMX(
+          FILTER(
+          ADDCOLUMNS(
+              SUMMARIZE(
+                  fAtual,
+                  dCalendario[Date], -- Cada dia
+                  fAtual[CD_LOCAL],
+                  fAtual[DX]-- Nível mais granular: Cidade
+              ),
+              "@Disponivel", CALCULATE(SUM(fAtual[QT DISP])),
+              "@Marcada", CALCULATE(SUM(fAtual[QT MARC]))
+          ),
+          fAtual[DX] = 1),
+          MAXX(
+              {[@Disponivel] - [@Marcada], 0}, 
+              [Value] -- Considera somente valores não negativos
+          )
+      )
+      
+    - Vagas Fora Prazo:
+      
+      VAR _vUltimoDiaValido = 
+          MAXX(
+              FILTER(
+                  fAtual,
+                  fAtual[DIAS_VALIDOS_ANS] = 1
+              ),
+              fAtual[DT_AGENDA]
+          )
+      VAR _vDataLimite = _vUltimoDiaValido + 30
+      VAR _vSomaQtDisp = 
+          SUMX(
+              FILTER(
+                  fAtual,
+                  fAtual[DT_AGENDA] > _vUltimoDiaValido &&
+                  fAtual[DT_AGENDA] <= _vDataLimite
+              ),
+              fAtual[QT DISP]
+          )
+      VAR _vSomaQtMarc = 
+          SUMX(
+              FILTER(
+                  fAtual,
+                  fAtual[DT_AGENDA] > _vUltimoDiaValido &&
+                  fAtual[DT_AGENDA] <= _vDataLimite
+              ),
+              fAtual[QT MARC]
+          )
+      RETURN 
+          _vSomaQtDisp - _vSomaQtMarc
+      
+    - Qt Disp D2 Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN 
+          CALCULATE(
+              SUM(fHistorico[QT_DISP_D2]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+    - Qt Disp D3 Atual:
+      
+      VAR UltimaData = CALCULATE(MAX(dCalendario_Hist[Date]), ALL(dCalendario_Hist))
+      VAR UltimoHorario = CALCULATE(MAX(fHistorico[CLASSIF_HORA]), 
+                                    FILTER(fHistorico, fHistorico[DT_ARQUIVO] = UltimaData))
+      RETURN 
+          CALCULATE(
+              SUM(fHistorico[QT_DISP_D3]),
+              fHistorico[DT_ARQUIVO] = UltimaData,
+              fHistorico[CLASSIF_HORA] = UltimoHorario
+          )
+    - %Vagas D2 Atual:
+      
+      VAR _vVagasD2 = [Qt Vagas D2 Atual]
+      VAR _vDispD2 = [Qt Disp D2 Atual]
+      RETURN
+      DIVIDE( _vVagasD2 , _vDispD2, 0 )
+    - %Vagas D3 Atual:
+      
+      VAR _vVagasD3 = [Qt Vagas D3 Atual]
+      VAR _vDispD3 = [Qt Disp D3 Atual]
+      RETURN
+      DIVIDE( _vVagasD3 , _vDispD3, 0 )
+    - Qt Zero Vagas ANS:
+      
+      VAR VagasZero = 
+      ADDCOLUMNS (
+          SUMMARIZE ( fHistorico, fHistorico[DT_ARQUIVO] ),
+          "VAGAS", 
+          VAR MinHora = 
+              CALCULATE(
+                  MIN(fHistorico[CLASSIF_HORA]),
+                  fHistorico[DT_ARQUIVO] = EARLIER(fHistorico[DT_ARQUIVO])
+              ) 
+          RETURN
+              CALCULATE (
+                  SUM(fHistorico[QT_SALDO_ANS]),
+                  fHistorico[DT_ARQUIVO] = EARLIER(fHistorico[DT_ARQUIVO]),
+                  fHistorico[CLASSIF_HORA] = MinHora
+              )
+      )
+      VAR DiasZerados = 
+          SUMX(
+              VagasZero,
+              IF([VAGAS] = 0, 1, 0)
+          )
+      RETURN
+          DiasZerados
+    - __Dif Dias:
+      
+      VAR MaxData = MAX(fDiasMeta[DT_ARQUIVO])
+      VAR MaxHoraData = CALCULATE(MAX(fDiasMeta[CLASSIF_HORA]), FILTER(fDiasMeta, fDiasMeta[DT_ARQUIVO] = MaxData))
+      RETURN
+      CALCULATE(
+          MIN(fDiasMeta[DIAS]),
+          FILTER(fDiasMeta, fDiasMeta[DT_ARQUIVO] = MaxData && [CLASSIF_HORA] = MaxHoraData)
+      )
+    - __Format Meta Hap:
+      
+      IF( ISBLANK([__Dif Dias Proximo Mensal com Calculo Diario]),
+       BLANK(), 
+       IF( [__Dif Dias Proximo Mensal com Calculo Diario] <= SELECTEDVALUE(fDiasMeta[META HAP], 0),
+        "1",
+        "0" ) 
+      )
+      
+    - __Format Meta Ans:
+      
+      IF( ISBLANK([__Dif Dias Proximo Mensal com Calculo Diario]),
+       BLANK(), 
+       IF( [__Dif Dias Proximo Mensal com Calculo Diario] <= SELECTEDVALUE(fDiasMeta[META ANS], 0),
+        "1",
+        "0" ) 
+      )
+    - __Qt Fora Meta Mensal Hap:
+      
+      SUMX(
+          VALUES(fDiasMeta[DT_ARQUIVO]), 
+          IF(
+              ISBLANK([__Dif Dias]), 
+              BLANK(), 
+              IF([__Dif Dias] <= SELECTEDVALUE(fDiasMeta[META HAP], 0), 0, 1)
+          )
+      )
+      
+    - __Qt Fora Meta Mensal Ans:
+      
+      SUMX(
+          VALUES(fDiasMeta[DT_ARQUIVO]), 
+          IF(
+              ISBLANK([__Dif Dias]), 
+              BLANK(), 
+              IF([__Dif Dias] <= SELECTEDVALUE(fDiasMeta[META ANS], 0), 0, 1)
+          )
+      )
+    - __Perc Fora Meta Mes Hap:
+      
+      VAR TotalDias = COUNTROWS(VALUES(fDiasMeta[DT_ARQUIVO])) -- Conta os dias únicos no mês
+      VAR DiasForaMeta = 
+          SUMX(
+              VALUES(fDiasMeta[DT_ARQUIVO]), 
+              IF(
+                  ISBLANK([__Dif Dias]), 
+                  BLANK(), 
+                  IF([__Dif Dias] <= SELECTEDVALUE(fDiasMeta[META HAP], 0), 0, 1)
+              )
+          )
+      RETURN
+      DIVIDE(DiasForaMeta, TotalDias, 0)
+      
+    - __Perc Fora Meta Mes Ans:
+      
+      VAR TotalDias = COUNTROWS(VALUES(fDiasMeta[DT_ARQUIVO])) -- Conta os dias únicos no mês
+      VAR DiasForaMeta = 
+          SUMX(
+              VALUES(fDiasMeta[DT_ARQUIVO]), 
+              IF(
+                  ISBLANK([__Dif Dias]), 
+                  BLANK(), 
+                  IF([__Dif Dias] <= SELECTEDVALUE(fDiasMeta[META ANS], 0), 0, 1)
+              )
+          )
+      RETURN
+      DIVIDE(DiasForaMeta, TotalDias, 0)
+    - __Dif Dias Media Mensal:
+      
+      AVERAGEX (
+          VALUES ( fDiasMeta[DT_ARQUIVO] ),
+          CALCULATE ( [__Dif Dias] )
+      )
+    - __Dif Dias Proximo Mensal com Calculo Diario:
+      AVERAGE( fDiasMeta[DIAS])
+    - __Dias Prox Dia Hora:
+      
+      VAR MinPorGrupo =
+          MIN ( fDiasMeta[DIAS] )
+      
+      VAR TabelaResumo =
+          GROUPBY (
+              fDiasMeta,
+              dCidade[SUB REGIAO],
+              dCidade[NM_FILIAL],
+              dCidade[NM_CIDADE],
+              dEspecialidade[NM_ESPECIALIDADE],
+              fDiasMeta[CLASSIF_HORA],
+              "MinimoPorGrupo", MINX ( CURRENTGROUP(), fDiasMeta[DIAS] )
+          )
+      
+      VAR MediaDosMinimos =
+          AVERAGEX ( TabelaResumo, [MinimoPorGrupo] )
+      
+      RETURN
+          IF (
+              ISINSCOPE ( fDiasMeta[CLASSIF_HORA] )
+                  || ISINSCOPE ( dEspecialidade[NM_ESPECIALIDADE] )
+                  || ISINSCOPE ( dCidade[NM_CIDADE] )
+                  || ISINSCOPE ( dCidade[NM_FILIAL] )
+                  || ISINSCOPE ( dCidade[SUB REGIAO] ),
+              MinPorGrupo,
+              MediaDosMinimos
+          )
+      
+    - __Format Meta Ans_v2:
+      
+      IF( ISBLANK([__Dias Media Dias Prox Final]),
+       BLANK(), 
+       IF( [__Dias Media Dias Prox Final] <= SELECTEDVALUE(fDiasMeta[META ANS], 0),
+        "1",
+        "0" ) 
+      )
+    - __Format Meta Hap_v2:
+      
+      IF( ISBLANK([__Dias Media Dias Prox Final]),
+       BLANK(), 
+       IF( [__Dias Media Dias Prox Final] <= SELECTEDVALUE(fDiasMeta[META HAP], 0),
+        "1",
+        "0" ) 
+      )
+      
+    - __Dias Media Dias Prox Final:
+      
+      AVERAGEX (
+          SUMMARIZE (
+              fDiasMeta,
+              dCalendario_Hist[Dia_Mes],
+              fDiasMeta[CLASSIF_HORA],
+              "MinDiasHorario", MIN ( fDiasMeta[DIAS] )
+          ),
+          [MinDiasHorario]
+      )
+      
+    - __MetaAns_Testando:
+      SELECTEDVALUE(fDiasMeta[META ANS])
+----------------------------------------
+Tabela: dCalendario
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Dia [int64]
+    - Mes [int64]
+    - Nm_Mes [string]
+    - Nm_Mes_Abrev [string]
+    - Mes_Ano [string]
+    - Classif_MesAno [int64]
+    - Dia_Sem_Abrev [string]
+    - Dia_Sem_Letra [string]
+    - Trimestre [string]
+    - Dia_Sem_Nome [string]
+    - Dia_Semana_No. [int64]
+    - SemanaAno [int64]
+    - FimDeSemana [string]
+----------------------------------------
+Tabela: ATUALIZACAO
+  Colunas:
+    - ATUALIZACAO [dateTime]
+----------------------------------------
+Tabela: fHistorico
+  Colunas:
+    - DT_ARQUIVO [dateTime]
+    - HORA_ARQUIVO [string]
+    - CLASSIF_HORA [int64]
+    - CD_LOCAL [string]
+    - CD_ESPECIALIDADE [int64]
+    - BASICA HAP [int64]
+    - BASICA ANS [int64]
+    - META HAP [int64]
+    - META ANS [int64]
+    - DX [int64]
+    - QT_DISP_7D [int64]
+    - QT_DISP_14D [int64]
+    - QT_DISP_21D [int64]
+    - QT_DISP_ANS [int64]
+    - QT_DISP_D2 [int64]
+    - QT_DISP_D3 [int64]
+    - QT_DISP_HAP [int64]
+    - QT_MARC_7D [int64]
+    - QT_MARC_14D [int64]
+    - QT_MARC_21D [int64]
+    - QT_MARC_ANS [int64]
+    - QT_MARC_D2 [int64]
+    - QT_MARC_D3 [int64]
+    - QT_MARC_HAP [int64]
+    - QT_SALDO_7D [int64]
+    - QT_SALDO_14D [int64]
+    - QT_SALDO_21D [int64]
+    - QT_SALDO_ANS [int64]
+    - QT_SALDO_D2 [int64]
+    - QT_SALDO_D3 [int64]
+    - QT_SALDO_HAP [int64]
+    - ID [string]
+----------------------------------------
+Tabela: dCalendario_Hist
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Nm_Mes [string]
+    - Nm_Mes_Abrev [string]
+    - Mes_Ano [string]
+    - Classif_MesAno [int64]
+    - Dia_Sem_Nome [string]
+    - Dia_Sem_Abrev [string]
+    - Dia_Semana_No. [int64]
+    - Dia_Sem_Letra [string]
+    - Trimestre [string]
+    - SemanaAno [int64]
+    - FimDeSemana [string]
+    - Dia_Mes [string]
+----------------------------------------
+Tabela: fEstoque
+  Colunas:
+    - CD_LOCAL [string]
+    - CD_ESPECIALIDADE [int64]
+    - DT_AGENDA [dateTime]
+    - Qtde Disponib. [int64]
+    - Qtde Marcadas [int64]
+    - CD_CLASSIFICACAO [string]
+    - ID [string]
+----------------------------------------
+Tabela: dCalendario_Estoque
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Nm_Mes [string]
+    - Nm_Mes_Abrev [string]
+    - Mes_Ano [string]
+    - Classif_MesAno [int64]
+    - Dia_Sem_Nome [string]
+    - Dia_Sem_Abrev [string]
+    - Dia_Semana_No. [int64]
+    - Dia_Sem_Letra [string]
+    - Trimestre [string]
+    - SemanaAno [int64]
+    - FimDeSemana [string]
+    - Dia_Mes [string]
+----------------------------------------
+Tabela: fDiasMeta
+  Colunas:
+    - DT_ARQUIVO [dateTime]
+    - CLASSIF_HORA [int64]
+    - CD_LOCAL [int64]
+    - CD_ESPECIALIDADE [int64]
+    - META HAP [int64]
+    - META ANS [int64]
+    - DIAS [int64]
+    - ID [string]
+----------------------------------------
+Tabela: ParâmetroVisao
+  Colunas:
+    - Visao [string]
+----------------------------------------
+Tabela: Tabela
+  Colunas:
+    - CD_LOCAL [int64]
+    - CD_ESPECIALIDADE [int64]
+    - CLASSIF_HORA [int64]
+    - MinimoPorGrupo [int64]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+fAtual[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+ATUALIZACAO[ATUALIZACAO] ---> LocalDateTable_3b35a5f8-f145-4fb4-a27d-7d59f846e8e6[Date]
+fHistorico[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+fEstoque[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+dCalendario_Estoque[Date] ---> LocalDateTable_60073d10-0cbd-4c0d-82a3-9667b01900af[Date]
+fEstoque[DT_AGENDA] ---> dCalendario_Estoque[Date]
+dCalendario[Date] ---> LocalDateTable_528d9138-aee0-42be-a9cd-860d7219f00f[Date]
+fAtual[DT_AGENDA] ---> dCalendario[Date]
+dCalendario_Hist[Date] ---> LocalDateTable_6894b56b-3320-40c9-8ce4-56f7693beab6[Date]
+fHistorico[DT_ARQUIVO] ---> dCalendario_Hist[Date]
+fDiasMeta[DT_ARQUIVO] ---> dCalendario_Hist[Date]
+fAtual[ID] ---> dCidade[ID]
+fHistorico[ID] ---> dCidade[ID]
+fEstoque[ID] ---> dCidade[ID]
+fDiasMeta[ID] ---> dCidade[ID]
+dCidade[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+fDiasMeta[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]

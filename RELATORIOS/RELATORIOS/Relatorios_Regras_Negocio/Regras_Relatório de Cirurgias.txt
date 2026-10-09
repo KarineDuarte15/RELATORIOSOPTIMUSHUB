@@ -1,0 +1,143 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatório de Cirurgias.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: Cirurgias
+  Colunas:
+    - CD_PACIENTE [string]
+    - CD_ATENDIMENTO [string]
+    - CD_PROCEDIMENTO [int64]
+    - NR_PROCEDIMENTO [string]
+    - DT_INICIO_CIRURGIA [dateTime]
+    - NM_PACIENTE [string]
+    - DT_NASCIMENTO [dateTime]
+    - CD_SALA_CIRURGICA [string]
+    - NM_MOTIVO_ATENDIMENTO [string]
+    - NM_UNIDADE_ATENDIMENTO [string]
+    - FL_FONTE [string]
+    - QTD [double]
+    - CD_UNIDADE_ATENDIMENTO [string]
+    - CANCELADO [string]
+    - TIPO [string]
+    - CONVENIO [string]
+    - NM_MEDICO [string]
+    - DS_SALA_CIRURGICA [string]
+    - TIPO_1 [string] (Calculada)
+    - TIPO_AJUSTADO [string] (Calculada)
+    - TIPO_ATO [string]
+    - CD_PESSOA [double]
+  Medidas DAX (Regras de Negócio):
+    - Qtd Cirurgias:
+      SUM(Cirurgias[QTD])
+    - Total Cirurgias:
+      
+          var mes = SELECTEDVALUE(_CALENDARIO[Mes/Ano])
+          var unidade = SELECTEDVALUE(Dim_Unidades[TIPO])
+          var convenio = SELECTEDVALUE(Dim_Convenio[TIPO CONVENIO])
+      
+          RETURN
+      
+          CALCULATE(
+              SUM(Cirurgias[QTD]),
+              Cirurgias[CANCELADO] <> "S",
+              FILTER(Dim_Convenio, Dim_Convenio[TIPO CONVENIO] = convenio),
+              FILTER(Dim_Unidades, Dim_Unidades[TIPO] = unidade),
+              FILTER(_CALENDARIO, _CALENDARIO[Mes/Ano] = mes),
+              ALL(Cirurgias)
+          )
+    - Qtd Partos:
+      
+          CALCULATE(
+              SUM(Cirurgias[QTD]),
+              Cirurgias[NR_PROCEDIMENTO] IN {"PARTO NORMAL", "PARTO COM VACUO EXTRATOR", "PARTO COM OU SEM EPISIOTOMIA", "PARTO CESARIANA + LAQUEADURA", "PARTO MULTIPLO (CADA UM SUBSEQUENTE AO INICIA", "PARTO A FORCEPS", "LAQUEADURA TUBARIA", "LAQUEADURA TUBARIA LAPAROSCOPICA", "CESARIANA"} ||
+              Cirurgias[TIPO] in {"PARTOS", "PARTOS VARGINAIS"}
+          )
+----------------------------------------
+Tabela: Dim_Unidades
+  Colunas:
+    - UNIDADE [string]
+    - NM UNIDADE [string]
+    - TIPO [string]
+    - UF [string]
+    - CIDADE [string]
+    - ENDERECO [string]
+    - CEP [string]
+    - FL_INDICADOR [string]
+    - SUB-REGIONAL [string]
+    - COD_UNIDADE_ASSISTENCIAL [double]
+    - CD_MUNICIPIO_IBGE [double]
+    - NACIONAL  [string]
+    - REGIONAL [string]
+    - latitude [string]
+    - longitude [string]
+    - AGRUPAMENTO [string]
+    - REGIAO_RELATORIO [string]
+    - RESPONSAVEL [string]
+    - DISTRITO [string]
+----------------------------------------
+Tabela: _CALENDARIO
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes_Num [int64]
+    - Dia_Num [int64]
+    - Mes_Abrev [string]
+    - Dia_Abrev [string]
+    - Sem_Dia_Num [int64]
+    - Sem_Num [int64]
+    - Tot_Dia [int64]
+    - %_Dia [int64]
+    - Mes_Relativo [string]
+    - Semana_Relativa [string]
+    - COMPETÊNCIA [dateTime]
+    - N_Mes_Relativo [int64]
+    - Mes/Ano [string] (Calculada)
+    - Data_Usar [string] (Calculada)
+----------------------------------------
+Tabela: Atualização
+  Colunas:
+    - Update_Day [dateTime]
+    - Atualização [string] (Calculada)
+----------------------------------------
+Tabela: Dim_Convenio
+  Colunas:
+    - CONVENIO [string]
+    - NM_CONVENIO [string]
+    - TIPO CONVENIO [string]
+    - FL_VENDA_SERVIÇO [string]
+    - FL_EXCLUSÃO [string]
+    - Observação [string]
+----------------------------------------
+Tabela: DePara_Especialidade
+  Colunas:
+    - CD_TIPO_GRUPO_PROC [string]
+    - CD_MODELO [string]
+    - NM_MODELO [string]
+    - CD_FAIXA_GRUPO [string]
+    - NM_FAIXA_GRUPO [string]
+    - CD_TIPO_ANESTESIA [string]
+    - NM_TIPO_ANESTESIA [string]
+    - TP_SALA_CIRURGICA [string]
+    - TP_PERMANENCIA [string]
+    - TP_UTI [string]
+    - CD_PROCEDIMENTO [string]
+    - NM_PROCEDIMENTO [string]
+    - ajuste_ndi [string]
+    - x [string]
+----------------------------------------
+Tabela: De_Para_Procedimentos
+  Colunas:
+    - CÓD. PROCEDIMENTO [int64]
+    - PROCEDIMENTO [string]
+    - TIPO [string]
+    - CÓD_PROC [int64]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+Cirurgias[NM_UNIDADE_ATENDIMENTO] ---> Dim_Unidades[UNIDADE]
+Cirurgias[DT_INICIO_CIRURGIA] ---> _CALENDARIO[Date]
+Cirurgias[CONVENIO] ---> Dim_Convenio[CONVENIO]
+Cirurgias[CD_PROCEDIMENTO] ---> DePara_Especialidade[CD_PROCEDIMENTO]

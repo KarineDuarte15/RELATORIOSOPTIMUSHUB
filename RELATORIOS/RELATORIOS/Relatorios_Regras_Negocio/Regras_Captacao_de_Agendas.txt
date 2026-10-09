@@ -1,0 +1,2773 @@
+============================================================
+MAPEAMENTO DE REGRAS: Captacao_de_Agendas.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: dCalendario
+  Colunas:
+    - Ano [int64]
+    - Mes [int64]
+    - MES_REF [string]
+    - MES_ANO [string]
+    - NM_MES [string]
+    - TRIMESTRE [string]
+    - ORDEM_MES [int64]
+    - DATA_MES [dateTime]
+----------------------------------------
+Tabela: _Medidas
+  Colunas:
+    - Column [int64]
+  Medidas DAX (Regras de Negócio):
+    - QT DISP:
+      
+      COALESCE(SUM(fMonitoramento[QT_MES_ATUAL]), 0)
+      
+    - QT MEDIANA 6M:
+      
+      COALESCE(SUM(fMonitoramento[QT_MEDIANA_6M]), 0)
+    - QT MAX 6M:
+      
+      COALESCE(SUM(fMonitoramento[QT_MAX_6M]), 0)
+    - DESVIO MEDIANA:
+      
+      DIVIDE(
+          [QT DISP] - [QT MEDIANA 6M],
+          [QT MEDIANA 6M],
+          0
+      )
+    - DESVIO MAX:
+      
+      DIVIDE(
+          [QT DISP] - [QT MAX 6M],
+          [QT MAX 6M],
+          0
+      )
+    - RISCO MAX:
+      
+      IF(
+          ISINSCOPE(fMonitoramento[NM_MEDICO]) || ISINSCOPE(fMonitoramento[CD_LOCAL]),
+          VAR MesAtual = [QT DISP]
+          VAR Max6M    = [QT MAX 6M]
+          VAR Pct      = DIVIDE(MesAtual, Max6M, 0)
+          RETURN
+              IF(
+                  Max6M = 0, "Sem histórico",
+                  IF(Pct >= 0.90, "🟢 Agenda Entregue",
+                  IF(Pct >= 0.75, "🟡 Entrega Parcial",
+                                  "🔴 Não Entregue"))
+              ),
+          BLANK()
+      )
+    - QT MEDICOS:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              fMonitoramento,
+              fMonitoramento[CD_MEDICO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[CD_LOCAL]
+          )
+      )
+    - QT MEDICOS RECORRENTES:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              FILTER(
+                  fMonitoramento,
+                  fMonitoramento[RECORRENCIA] = "Recorrente"
+              ),
+              fMonitoramento[CD_MEDICO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[CD_LOCAL]
+          )
+      )
+    - Card 1 Medicos HTML:
+      
+      VAR TotalMedicos = [QT MEDICOS]
+      VAR Recorrentes  = [QT MEDICOS RECORRENTES]
+      VAR PctRec       = DIVIDE(Recorrentes, TotalMedicos, 0)
+      
+      VAR MesAtual =
+          SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      
+      VAR TotalAnterior =
+          IF(ISBLANK(MesAnterior), BLANK(), CALCULATE([QT MEDICOS], fMonitoramento[MES_AGENDA] = MesAnterior))
+      
+      VAR RecAnterior =
+          IF(ISBLANK(MesAnterior), BLANK(), CALCULATE([QT MEDICOS RECORRENTES], fMonitoramento[MES_AGENDA] = MesAnterior))
+      
+      VAR PctRecAnterior =
+          IF(ISBLANK(MesAnterior), BLANK(), DIVIDE(RecAnterior, TotalAnterior, 0))
+      
+      VAR DeltaTotal =
+          IF(ISBLANK(TotalAnterior), BLANK(), DIVIDE(TotalMedicos - TotalAnterior, TotalAnterior, 0))
+      
+      VAR DeltaTotalFmt =
+          IF(
+              ISBLANK(DeltaTotal), "Mês base",
+              IF(DeltaTotal >= 0,
+                  "▲ +" & FORMAT(ABS(DeltaTotal), "0.0%"),
+                  "▼ "  & FORMAT(ABS(DeltaTotal), "0.0%"))
+          )
+      
+      VAR CorDeltaTotal = IF(ISBLANK(DeltaTotal) || DeltaTotal >= 0, "#14643c", "#c0392b")
+      VAR BgDeltaTotal  = IF(ISBLANK(DeltaTotal) || DeltaTotal >= 0, "#e8f5ee", "#fdecea")
+      
+      VAR DeltaRec =
+          IF(ISBLANK(PctRecAnterior), BLANK(), PctRec - PctRecAnterior)
+      
+      VAR DeltaRecFmt =
+          IF(
+              ISBLANK(DeltaRec), "Mês base",
+              IF(DeltaRec >= 0,
+                  "▲ +" & FORMAT(ABS(DeltaRec) * 100, "0.0") & " p.p.",
+                  "▼ "  & FORMAT(ABS(DeltaRec) * 100, "0.0") & " p.p.")
+          )
+      
+      VAR CorDeltaRec = IF(ISBLANK(DeltaRec) || DeltaRec >= 0, "#14643c", "#c0392b")
+      VAR BgDeltaRec  = IF(ISBLANK(DeltaRec) || DeltaRec >= 0, "#e8f5ee", "#fdecea")
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #1a5fa8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+      
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Cobertura de Médicos</span>
+          <span style='font-size:15px;opacity:.5;'>👨‍⚕️</span>
+        </div>
+      
+        <div>
+          <div style='display:flex;align-items:baseline;gap:10px;'>
+            <span style='font-size:38px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#1a5fa8;'>" & FORMAT(TotalMedicos, "#,##0") & "</span>
+            <span style='font-size:14px;color:#6b7a99;font-weight:500;'>médicos elegíveis</span>
+            <span style='display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;background:" & BgDeltaTotal & ";color:" & CorDeltaTotal & ";margin-left:auto;'>" & DeltaTotalFmt & "</span>
+          </div>
+      
+          <div style='display:flex;align-items:baseline;gap:10px;margin-top:8px;'>
+            <span style='font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#14643c;'>" & FORMAT(PctRec, "0.0%") & "</span>
+            <span style='font-size:13px;color:#6b7a99;font-weight:500;'>são recorrentes (" & FORMAT(Recorrentes, "#,##0") & ")</span>
+            <span style='display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;background:" & BgDeltaRec & ";color:" & CorDeltaRec & ";margin-left:auto;'>" & DeltaRecFmt & "</span>
+          </div>
+        </div>
+      
+        <div style='font-size:11px;color:#9aa6b8;line-height:1.5;padding-top:10px;border-top:1px solid #f3f5f8;'>
+          Cada combinação <b style='color:#6b7a99;'>Médico + Especialidade + Unidade</b> conta como um elegível. São <b style='color:#14643c;'>recorrentes</b> os que disponibilizaram em pelo menos 3 dos últimos 6 meses.
+        </div>
+      
+      </div>"
+    - QT COM DISP MES ATUAL:
+      
+      COUNTROWS(
+          FILTER(
+              SUMMARIZE(
+                  fMonitoramento,
+                  fMonitoramento[CD_MEDICO],
+                  fMonitoramento[CD_ESPECIALIDADE],
+                  fMonitoramento[CD_LOCAL],
+                  fMonitoramento[FL_DISP_MES_ATUAL]
+              ),
+              fMonitoramento[FL_DISP_MES_ATUAL] = "S"
+          )
+      )
+    - QT SEM DISP MES ATUAL:
+      
+      COUNTROWS(
+          FILTER(
+              SUMMARIZE(
+                  fMonitoramento,
+                  fMonitoramento[MES_AGENDA],
+                  fMonitoramento[CD_MEDICO],
+                  fMonitoramento[CD_ESPECIALIDADE],
+                  fMonitoramento[CD_LOCAL],
+                  fMonitoramento[FL_DISP_MES_ATUAL]
+              ),
+              fMonitoramento[FL_DISP_MES_ATUAL] = "N"
+          )
+      )
+    - Card 2 Capacidade meta:
+      
+      VAR TotalDisp    = [QT DISP]
+      VAR TotalMax     = [QT MAX 6M]
+      VAR Aprov        = DIVIDE(TotalDisp, TotalMax, 0)
+      VAR GapPP        = (0.90 - Aprov) * 100
+      VAR MesAtual     = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      VAR AprovAnt     = IF(
+                           ISBLANK(MesAnterior), BLANK(),
+                           DIVIDE(
+                               CALCULATE([QT DISP],   fMonitoramento[MES_AGENDA] = MesAnterior),
+                               CALCULATE([QT MAX 6M], fMonitoramento[MES_AGENDA] = MesAnterior),
+                               0
+                           )
+                         )
+      VAR Delta        = IF(ISBLANK(AprovAnt), BLANK(), Aprov - AprovAnt)
+      VAR DeltaFmt     = IF(
+                           ISBLANK(Delta), "Mês base",
+                           IF(Delta >= 0,
+                               "▲ +" & FORMAT(ABS(Delta)*100, "0.0") & " p.p.",
+                               "▼ "  & FORMAT(ABS(Delta)*100, "0.0") & " p.p.")
+                         )
+      VAR CorDelta     = IF(ISBLANK(Delta) || Delta >= 0, "#14643c", "#c0392b")
+      VAR BgDelta      = IF(ISBLANK(Delta) || Delta >= 0, "#e8f5ee",  "#fdecea")
+      VAR CorBarra     = IF(Aprov >= 0.90, "#14643c", IF(Aprov >= 0.75, "#d97b00", "#c0392b"))
+      VAR LargBarra    = FORMAT(MIN(Aprov * 100, 100), "0") & "%"
+      VAR GapFmt       = FORMAT(GapPP, "0.0") & " p.p."
+      VAR GapConsultas = MAX(0, ROUND(TotalMax * 0.9 - TotalDisp, 0))
+      VAR LabelEsquerda = IF(Aprov >= 0.90, "✅ Meta atingida", "Faltam " & FORMAT(GapConsultas, "#,##0") & " consultas p/ atingir a meta")
+      VAR MesMaisRecente = CALCULATE(MAX(fMonitoramento[MES_AGENDA]), ALL(fMonitoramento[MES_AGENDA]))
+      VAR IsAgo        = MesAtual = MesMaisRecente
+      VAR BadgeAgo     = "<span style='display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:3px 9px;border-radius:10px;background:#fff8e6;color:#7a5c00;'>⚠️ Em confecção</span>"
+      VAR BadgeDelta   = "<span style='display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:3px 9px;border-radius:10px;background:" & BgDelta & ";color:" & CorDelta & ";'>" & DeltaFmt & " vs mês anterior</span>"
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #d97b00;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Utilização da Capacidade</span>
+          <span style='font-size:15px;opacity:.5;'>📊</span>
+        </div>
+        <div>
+          <div style='font-size:42px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#c07b0a;'>" & FORMAT(Aprov, "0.0%") & "</div>
+          <div style='font-size:13px;color:#8694ab;margin-top:3px;'>" & FORMAT(TotalDisp, "#,##0") & " de " & FORMAT(TotalMax, "#,##0") & " consultas</div>
+          <div style='margin-top:6px;'>" & IF(IsAgo, BadgeAgo, BadgeDelta) & "</div>
+          <div style='margin:12px 0 2px;'>
+            <div style='display:flex;justify-content:space-between;font-size:11px;color:#8694ab;margin-bottom:4px;'><span>" & LabelEsquerda & "</span><span>Meta 90%</span></div>
+            <div style='height:5px;background:#f0f3f8;border-radius:4px;overflow:hidden;'><div style='width:" & LargBarra & ";height:100%;background:" & CorBarra & ";border-radius:4px;'></div></div>
+          </div>
+        </div>
+        <div style='display:flex;justify-content:flex-start;align-items:center;font-size:12px;padding-top:8px;border-top:1px solid #f3f5f8;'>
+          <span style='color:#9aa6b8;'>QT Disp / QT Máx · Visão T22J2 </span>
+        </div>
+      </div>"
+    - QT SEM CONTROLE NOMINAL:
+      
+      COUNTROWS(
+          FILTER(
+              SUMMARIZE(
+                  fMonitoramento,
+                  fMonitoramento[MES_AGENDA],
+                  fMonitoramento[CD_MEDICO],
+                  fMonitoramento[CD_ESPECIALIDADE],
+                  fMonitoramento[CD_LOCAL],
+                  fMonitoramento[STATUS]
+              ),
+              ISBLANK(fMonitoramento[STATUS])
+          )
+      )
+    - Card 6 Aderencia HTML:
+      
+      VAR QtdCidades        = DISTINCTCOUNT(fMonitoramento[CIDADE])
+      VAR QtdEspecialidades = DISTINCTCOUNT(fMonitoramento[DS_ESPECIALIDADE])
+      VAR QtdSubRegioes     = DISTINCTCOUNT(fMonitoramento[SUB_REGIAO])
+      VAR CidadeAtual        = SELECTEDVALUE(fMonitoramento[CIDADE])
+      VAR EspecialidadeAtual = SELECTEDVALUE(fMonitoramento[DS_ESPECIALIDADE])
+      VAR SubRegiaoAtual      = SELECTEDVALUE(fMonitoramento[SUB_REGIAO])
+      
+      VAR CidadeCodAtual = SELECTEDVALUE(fMonitoramento[CD_LOCALIDADE_CIDADE])
+      VAR EspCodAtual    = SELECTEDVALUE(fMonitoramento[CD_ESPECIALIDADE])
+      VAR MesAtual       = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      
+      VAR EhSubRegiaoUnica = QtdSubRegioes = 1
+      
+      VAR ComboFiltrado =
+          FILTER(
+              FORECAST_UNIVERSO_COMPLETO,
+              [CD_LOCALIDADE_CIDADE] = CidadeCodAtual &&
+              [CD_ESPECIALIDADE] = EspCodAtual &&
+              (ISBLANK(MesAtual) || [MES] = MesAtual) &&
+              [QT_COMPRA_UNIVERSO] > 0
+          )
+      
+      VAR ComboSemMistas =
+          FILTER(
+              ComboFiltrado,
+              VAR CidAtual = [CD_LOCALIDADE_CIDADE]
+              VAR EspComb  = [CD_ESPECIALIDADE]
+              VAR MesComb  = [MES]
+              VAR EhMista =
+                  CALCULATE(
+                      COUNTROWS(AGENDAS_MISTAS_HISTORICO),
+                      FILTER(
+                          ALL(AGENDAS_MISTAS_HISTORICO),
+                          AGENDAS_MISTAS_HISTORICO[CD_ESPECIALIDADE] = EspComb &&
+                          AGENDAS_MISTAS_HISTORICO[CD_LOCALIDADE] = CidAtual &&
+                          AGENDAS_MISTAS_HISTORICO[MES_ANO] = MesComb
+                      )
+                  )
+              RETURN
+                  EhMista = 0
+          )
+      
+      VAR TotalCombos = COUNTROWS(ComboSemMistas)
+      VAR CombosOK =
+          COUNTROWS(
+              FILTER(
+                  ComboSemMistas,
+                  DIVIDE([QT_DISP_UNIVERSO], [QT_COMPRA_UNIVERSO], 0) >= 0.90
+              )
+          )
+      
+      VAR AderenciaCombo = DIVIDE(CombosOK, TotalCombos, 0) * 100
+      VAR AderenciaLocal = DIVIDE([QT DISP FORECAST], [QT COMPRA], 0) * 100
+      
+      VAR Aderencia = IF(EhSubRegiaoUnica, AderenciaLocal, AderenciaCombo)
+      
+      VAR DiasZeradosPorSub =
+          SUMMARIZE(
+              fMonitoramento,
+              fMonitoramento[SUB_REGIAO],
+              "_DZ", MAX(fMonitoramento[DIAS_ZERADOS])
+          )
+      VAR DiasZeradosMin = MINX(DiasZeradosPorSub, [_DZ])
+      VAR DiasZeradosBruto = MAX(fMonitoramento[DIAS_ZERADOS])
+      
+      VAR DiasZerados = IF(EhSubRegiaoUnica, DiasZeradosBruto, DiasZeradosMin)
+      
+      VAR Meta               = 90
+      VAR EhAderente         = Aderencia >= Meta
+      VAR CorStatus          = IF(EhAderente, "rgb(20,100,60)", "#c0392b")
+      VAR BgStatus           = IF(EhAderente, "rgb(220,245,232)", "rgb(255,235,235)")
+      VAR TextoStatus        = IF(EhAderente, "✅ Aderente", "❌ Não Aderente")
+      VAR CorDias            = IF(DiasZerados = 0, "rgb(20,100,60)", IF(DiasZerados <= 7, "#e6a817", "#c0392b"))
+      VAR BgDias             = IF(DiasZerados = 0, "rgb(220,245,232)", IF(DiasZerados <= 7, "rgb(255,248,220)", "rgb(255,235,235)"))
+      
+      VAR Rodape =
+          IF(
+              EhSubRegiaoUnica,
+              CidadeAtual & " · " & EspecialidadeAtual & " · " & SubRegiaoAtual,
+              CidadeAtual & " · " & EspecialidadeAtual & " · " &
+              IF(EhAderente, "Meta de 90% atingida", CombosOK & " de " & TotalCombos & " combinações ≥ 90%")
+          )
+      
+      RETURN
+      IF(
+          QtdCidades = 1 && QtdEspecialidades = 1,
+          "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #1a5fa8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+      
+            <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+              <span style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Aderência Forecast + Dias Zerados</span>
+              <span style='font-size:15px;opacity:.5;'>✅</span>
+            </div>
+      
+            <div style='display:flex;align-items:center;width:100%;justify-content:center;flex:1;'>
+              <div style='text-align:center;flex:1;'>
+                <div style='font-size:11px;color:#8694ab;margin-bottom:4px;'>📊 % Aderência</div>
+                <div style='font-size:38px;font-weight:800;letter-spacing:-0.5px;color:#2c3e50;line-height:1;'>" & FORMAT(Aderencia, "0.00") & "%</div>
+                <div style='margin-top:6px;'><span style='font-size:12px;font-weight:700;padding:3px 9px;border-radius:10px;background:" & BgStatus & ";color:" & CorStatus & ";display:inline-block;'>" & TextoStatus & "</span></div>
+              </div>
+              <div style='width:1px;height:64px;background:#f0f3f8;'></div>
+              <div style='text-align:center;flex:1;'>
+                <div style='font-size:11px;color:#8694ab;margin-bottom:4px;'>📅 Dias Zerados</div>
+                <div style='font-size:38px;font-weight:800;letter-spacing:-0.5px;color:" & CorDias & ";line-height:1;'>" & FORMAT(DiasZerados, "#,##0") & "</div>
+                <div style='margin-top:6px;'><span style='font-size:12px;font-weight:700;padding:3px 9px;border-radius:10px;background:" & BgDias & ";color:" & CorDias & ";display:inline-block;'>dias sem vagas</span></div>
+              </div>
+            </div>
+      
+            <div style='text-align:center;font-size:12px;color:#9aa6b8;padding-top:8px;border-top:1px solid #f3f5f8;'>" & Rodape & "</div>
+      
+          </div>",
+      
+          "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border-top:2px solid #b0bac8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+            <svg width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='#bbb' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>
+                <path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/>
+            </svg>
+            <div style='margin-top:10px;font-size:14px;color:#999;font-weight:500;'>Selecione uma cidade e especialidade específica para ver a aderência</div>
+          </div>"
+      )
+    - Pagina Sumario HTML:
+      
+      "<div style='font-family:Segoe UI,sans-serif;background:transparent;padding:32px 40px;width:100%;max-width:900px;box-sizing:border-box;color:#2c3e50;line-height:1.6'>
+      
+      <div style='display:flex;align-items:center;gap:10px;margin-bottom:4px'>
+        <span style='font-size:28px;font-weight:800;color:#1a5fa8'>Sobre esta página — BI captação de agendas</span>
+      </div>
+      <div style='height:2px;background:linear-gradient(90deg,#1a5fa8,transparent);margin:14px 0 26px 0'></div>
+      
+      <div style='margin-bottom:24px'>
+        <div style='font-size:19px;font-weight:700;color:#1a5fa8;margin-bottom:8px'>O que é esta análise</div>
+        <div style='font-size:16px;color:#444'>Esta página monitora médicos elegíveis, comparando o volume disponibilizado na agenda selecionada com o histórico recente, e sinalizando riscos operacionais. O escopo contempla apenas agendas nominais <b>HAPCLINICA</b> e <b>CAPTADO</b>, com especialidades ativas no forecast de compra.</div>
+      </div>
+      
+      <div style='margin-bottom:24px'>
+        <div style='font-size:19px;font-weight:700;color:#1a5fa8;margin-bottom:8px'>Janela de dados utilizada</div>
+        <div style='font-size:16px;color:#444'>Para cada mês de agenda (<b>MES_AGENDA</b>), utilizamos uma janela de <b>6 meses</b>: os 5 meses anteriores ao mês alvo (para calcular mediana e máximo histórico) mais o próprio mês alvo (para medir a disponibilização atual).</div>
+        <div style='font-size:15px;color:#777;background:rgba(255,255,255,0.6);border-left:3px solid #1a5fa8;padding:10px 14px;margin-top:10px;border-radius:4px'>Exemplo: para a agenda de julho, a equipe trabalha com a confecção feita em maio, usando o histórico de fevereiro a junho como base, e julho como mês de referência atual.</div>
+      </div>
+      
+      <div style='margin-bottom:24px'>
+        <div style='font-size:19px;font-weight:700;color:#1a5fa8;margin-bottom:8px'>Como um médico entra na listagem</div>
+        <div style='font-size:16px;color:#444'>Um médico é considerado elegível se disponibilizou agenda em qualquer um dos 6 meses da janela, seja no histórico (antes da confecção) ou durante o período de monitoramento (após a confecção).</div>
+      </div>
+      
+      <div style='margin-bottom:24px'>
+        <div style='font-size:19px;font-weight:700;color:#1a5fa8;margin-bottom:12px'>Principais indicadores</div>
+      
+        <div style='font-size:16px;color:#444;margin-bottom:10px'><b>QT DISP</b> — quantidade disponibilizada no mês de agenda selecionado</div>
+        <div style='font-size:16px;color:#444;margin-bottom:10px'><b>QT MEDIANA (6M)</b> — mediana das disponibilizações nos 5 meses anteriores, calculada apenas quando o médico disponibilizou em pelo menos 3 dos 5 meses históricos; caso contrário, exibe NULL para evitar valores distorcidos</div>
+        <div style='font-size:16px;color:#444;margin-bottom:10px'><b>QT MAX (6M)</b> — valor máximo disponibilizado nos 5 meses anteriores</div>
+        <div style='font-size:16px;color:#444;margin-bottom:14px'><b>DESVIO MEDIANA / DESVIO MAX</b> — variação percentual do mês atual em relação à mediana/máximo histórico</div>
+      
+        <div style='font-size:16px;color:#444;font-weight:600;margin-bottom:8px'>FREQUÊNCIA ENTREGA (RECORRÊNCIA) — classifica o médico como:</div>
+        <div style='display:flex;flex-direction:column;gap:6px;margin-left:6px;margin-bottom:14px'>
+          <div style='font-size:15px;color:#555'>🟢 <b>Recorrente</b>: disponibilizou em pelo menos 50% dos 5 meses históricos (≥ 3 meses)</div>
+          <div style='font-size:15px;color:#555'>🟡 <b>Não Recorrente</b>: disponibilizou em menos de 50% dos meses históricos</div>
+          <div style='font-size:15px;color:#555'>🆕 <b>Novo</b>: não tinha histórico suficiente e passou a disponibilizar no mês atual</div>
+        </div>
+      
+        <div style='font-size:16px;color:#444;font-weight:600;margin-bottom:8px'>RISCO MAX — classifica o risco operacional comparando o mês atual ao máximo histórico:</div>
+        <div style='display:flex;flex-direction:column;gap:6px;margin-left:6px'>
+          <div style='font-size:15px;color:#555'>🟢 <b>AGENDA ENTREGUE</b>: disponibilização ≥ 90% do máximo histórico</div>
+          <div style='font-size:15px;color:#555'>🟡 <b>ENTREGA PARCIAL</b>: disponibilização entre 75% e 89% do máximo histórico</div>
+          <div style='font-size:15px;color:#555'>🔴 <b>NÃO ENTREGUE</b>: disponibilização abaixo de 75% do máximo histórico</div>
+        </div>
+      </div>
+      
+      <div style='margin-bottom:24px'>
+        <div style='font-size:19px;font-weight:700;color:#1a5fa8;margin-bottom:10px'>Card de Risco Operacional</div>
+        <div style='font-size:16px;color:#444;margin-bottom:8px'>⚠️ <b>Médico Sem Status</b>: percentual de médicos elegíveis que ainda não possuem status de agenda nominal cadastrado</div>
+        <div style='font-size:16px;color:#444'>🔴 <b>Sem Disponibilização</b>: percentual de médicos elegíveis que não disponibilizaram agenda no mês atual</div>
+      </div>
+      
+      <div>
+        <div style='font-size:19px;font-weight:700;color:#1a5fa8;margin-bottom:10px'>Card de Aderência</div>
+        <div style='font-size:16px;color:#444;margin-bottom:8px'>Mostra o percentual de aderência (disponibilizado vs. necessidade de compra) por localidade + especialidade. O card só exibe o valor exato quando uma única combinação de cidade e especialidade está selecionada. A meta de referência é <b>90%</b>.</div>
+        <div style='font-size:16px;color:#444'>📅 <b>Dias Zerados</b>: quantidade de dias no mês sem vagas disponíveis na especialidade. Quanto maior o valor, maior o risco de desabastecimento:
+          <span style='color:rgb(20,100,60);font-weight:600'> 🟢 0 dias</span> ·
+          <span style='color:#e6a817;font-weight:600'> 🟡 1 a 7 dias</span> ·
+          <span style='color:#c0392b;font-weight:600'> 🔴 8+ dias</span>
+        </div>
+      </div>
+      
+      </div>"
+    - Legenda Entrega de ageda HTML:
+      
+      "<div style='font-family:Segoe UI,sans-serif;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 14px;background:transparent;'>
+        <span style='font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#aab4c8;margin-right:6px;white-space:nowrap;'>Critérios</span>
+        <span style='display:inline-flex;align-items:center;gap:5px;background:#e8f5ee;border:1px solid #b7dfc8;border-radius:6px;padding:4px 12px;'>
+          <span style='font-size:13px;'>🟢</span>
+          <span style='font-size:12.5px;font-weight:700;color:#14643c;'>Agenda Entregue</span>
+          <span style='font-size:11.5px;color:#2E7D32;border-left:1px solid #b7dfc8;padding-left:8px;margin-left:2px;'>≥ 90% do máximo histórico</span>
+        </span>
+        <span style='display:inline-flex;align-items:center;gap:5px;background:#fff8e6;border:1px solid #f5d98a;border-radius:6px;padding:4px 12px;'>
+          <span style='font-size:13px;'>🟡</span>
+          <span style='font-size:12.5px;font-weight:700;color:#c07b0a;'>Entrega Parcial</span>
+          <span style='font-size:11.5px;color:#c07b0a;border-left:1px solid #f5d98a;padding-left:8px;margin-left:2px;'>75% a 89% do máximo histórico</span>
+        </span>
+        <span style='display:inline-flex;align-items:center;gap:5px;background:#fdecea;border:1px solid #f5b8b4;border-radius:6px;padding:4px 12px;'>
+          <span style='font-size:13px;'>🔴</span>
+          <span style='font-size:12.5px;font-weight:700;color:#c0392b;'>Não Entregue</span>
+          <span style='font-size:11.5px;color:#c0392b;border-left:1px solid #f5b8b4;padding-left:8px;margin-left:2px;'>abaixo de 75% do máximo histórico</span>
+        </span>
+        <span style='display:inline-flex;align-items:center;gap:5px;background:#f4f6f9;border:1px solid #dce3f0;border-radius:6px;padding:4px 12px;'>
+          <span style='font-size:13px;'>⬜</span>
+          <span style='font-size:12.5px;font-weight:700;color:#8694ab;'>Sem histórico</span>
+          <span style='font-size:11.5px;color:#aab4c8;border-left:1px solid #dce3f0;padding-left:8px;margin-left:2px;'>sem QT Máx 6M calculado</span>
+        </span>
+      </div>"
+    - STATUS NOMINAL:
+      
+      IF(
+          ISINSCOPE(fMonitoramento[NM_MEDICO]) || ISINSCOPE(fMonitoramento[CD_LOCAL]),
+          VAR RiscoAtual = [RISCO MAX]
+          RETURN
+              IF(
+                  RiscoAtual = "🟢 Agenda Entregue", "—",
+                  IF(
+                      RiscoAtual = "🟡 Entrega Parcial"
+                          || RiscoAtual = "🔴 Não Entregue"
+                          || RiscoAtual = "Sem histórico",
+                      IF(
+                          ISBLANK(SELECTEDVALUE(fMonitoramento[STATUS])),
+                          "",
+                          SELECTEDVALUE(fMonitoramento[STATUS])
+                      ),
+                      ""
+                  )
+              ),
+          BLANK()
+      )
+    - Card Medicos Gerencial HTML:
+      
+      VAR TotalMedicos = [QT MEDICOS]
+      VAR MesAtual     = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      VAR QtdAnterior  = IF(
+                          ISBLANK(MesAnterior),
+                          BLANK(),
+                          CALCULATE([QT MEDICOS], fMonitoramento[MES_AGENDA] = MesAnterior)
+                        )
+      VAR Delta        = DIVIDE(TotalMedicos - QtdAnterior, QtdAnterior, 0)
+      VAR DeltaFmt     = IF(
+                          ISBLANK(QtdAnterior), "Mês base",
+                          IF(Delta >= 0,
+                              "▲ +" & FORMAT(ABS(Delta), "0.0%"),
+                              "▼ "  & FORMAT(ABS(Delta), "0.0%"))
+                        )
+      VAR CorDelta     = IF(ISBLANK(QtdAnterior) || Delta >= 0, "#14643c", "#c0392b")
+      VAR BgDelta      = IF(ISBLANK(QtdAnterior) || Delta >= 0, "#e8f5ee",  "#fdecea")
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;padding:14px 16px 12px;height:148px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #1a5fa8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:8.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Médicos Elegíveis</span>
+          <span style='font-size:12px;opacity:.5;'>👨‍⚕️</span>
+        </div>
+        <div>
+          <div style='font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#1a5fa8;'>" & FORMAT(TotalMedicos, "#,##0") & "</div>
+          <div style='font-size:10px;color:#b0bac8;margin-top:1px;'>médicos</div>
+          <span style='display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:10px;margin-top:4px;background:" & BgDelta & ";color:" & CorDelta & ";'>" & DeltaFmt & " vs mês anterior</span>
+        </div>
+        <div style='font-size:9.5px;color:#b0bac8;padding-top:6px;border-top:1px solid #f3f5f8;'>Agendas nominais ativas</div>
+      </div>"
+    - Card Recorrencia Gerencial HTML:
+      
+      VAR TotalMedicos  = [QT MEDICOS]
+      VAR Recorrentes   = [QT MEDICOS RECORRENTES]
+      VAR PctRec        = DIVIDE(Recorrentes, TotalMedicos, 0)
+      VAR MesAtual      = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      VAR PctAnt        = IF(
+                            ISBLANK(MesAnterior), BLANK(),
+                            DIVIDE(
+                                CALCULATE([QT MEDICOS RECORRENTES], fMonitoramento[MES_AGENDA] = MesAnterior),
+                                CALCULATE([QT MEDICOS],              fMonitoramento[MES_AGENDA] = MesAnterior),
+                                0
+                            )
+                          )
+      VAR Delta         = IF(ISBLANK(PctAnt), BLANK(), PctRec - PctAnt)
+      VAR DeltaFmt      = IF(
+                            ISBLANK(Delta), "Mês base",
+                            IF(Delta >= 0,
+                                "▲ +" & FORMAT(ABS(Delta)*100, "0.0") & " p.p.",
+                                "▼ "  & FORMAT(ABS(Delta)*100, "0.0") & " p.p.")
+                          )
+      VAR CorDelta      = IF(ISBLANK(Delta) || Delta >= 0, "#14643c", "#c0392b")
+      VAR BgDelta       = IF(ISBLANK(Delta) || Delta >= 0, "#e8f5ee",  "#fdecea")
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;padding:14px 16px 12px;height:148px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #14643c;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:8.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Médicos Recorrentes</span>
+          <span style='font-size:12px;opacity:.5;'>🔄</span>
+        </div>
+        <div>
+          <div style='font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#14643c;'>" & FORMAT(PctRec, "0.0%") & "</div>
+          <span style='display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:10px;margin-top:4px;background:" & BgDelta & ";color:" & CorDelta & ";'>" & DeltaFmt & " vs mês anterior</span>
+        </div>
+        <div style='font-size:9.5px;color:#b0bac8;padding-top:6px;border-top:1px solid #f3f5f8;'>" & FORMAT(Recorrentes, "#,##0") & " médicos recorrentes.</div>
+      </div>"
+    - Card Utilizacao Gerencial HTML:
+      
+      VAR TotalDisp    = [QT DISP]
+      VAR TotalMax     = [QT MAX 6M]
+      VAR Aprov        = DIVIDE(TotalDisp, TotalMax, 0)
+      VAR GapPP        = (0.90 - Aprov) * 100
+      VAR MesAtual     = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      VAR AprovAnt     = IF(
+                           ISBLANK(MesAnterior), BLANK(),
+                           DIVIDE(
+                               CALCULATE([QT DISP],   fMonitoramento[MES_AGENDA] = MesAnterior),
+                               CALCULATE([QT MAX 6M], fMonitoramento[MES_AGENDA] = MesAnterior),
+                               0
+                           )
+                         )
+      VAR Delta        = IF(ISBLANK(AprovAnt), BLANK(), Aprov - AprovAnt)
+      VAR DeltaFmt     = IF(
+                           ISBLANK(Delta), "Mês base",
+                           IF(Delta >= 0,
+                               "▲ +" & FORMAT(ABS(Delta)*100, "0.0") & " p.p.",
+                               "▼ "  & FORMAT(ABS(Delta)*100, "0.0") & " p.p.")
+                         )
+      VAR CorDelta     = IF(ISBLANK(Delta) || Delta >= 0, "#14643c", "#c0392b")
+      VAR BgDelta      = IF(ISBLANK(Delta) || Delta >= 0, "#e8f5ee",  "#fdecea")
+      VAR CorBarra     = IF(Aprov >= 0.90, "#14643c", IF(Aprov >= 0.75, "#d97b00", "#c0392b"))
+      VAR LargBarra    = FORMAT(MIN(Aprov * 100, 100), "0") & "%"
+      VAR GapFmt       = FORMAT(GapPP, "0.0") & " p.p."
+      VAR MesMaisRecente = CALCULATE(MAX(fMonitoramento[MES_AGENDA]), ALL(fMonitoramento[MES_AGENDA]))
+      VAR IsAgo        = MesAtual = MesMaisRecente
+      VAR BadgeAgo     = "<span style='display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:10px;background:#fff8e6;color:#7a5c00;'>⚠️ Em confecção</span>"
+      VAR BadgeDelta   = "<span style='display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:10px;background:" & BgDelta & ";color:" & CorDelta & ";'>" & DeltaFmt & " vs mês anterior</span>"
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;padding:14px 16px 12px;height:148px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #d97b00;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:8.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Utilização da Capacidade</span>
+          <span style='font-size:12px;opacity:.5;'>📊</span>
+        </div>
+        <div>
+          <div style='font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#c07b0a;'>" & FORMAT(Aprov, "0.0%") & "</div>
+          <div style='font-size:10px;color:#b0bac8;margin-top:1px;'>" & FORMAT(TotalDisp, "#,##0") & " de " & FORMAT(TotalMax, "#,##0") & " consultas</div>
+          " & IF(IsAgo, BadgeAgo, BadgeDelta) & "
+          <div style='margin:4px 0 2px;'>
+            <div style='display:flex;justify-content:space-between;font-size:8.5px;color:#b0bac8;margin-bottom:3px;'><span>Atual " & FORMAT(Aprov,"0.0%") & "</span><span>Meta 90%</span></div>
+            <div style='height:3px;background:#f0f3f8;border-radius:4px;overflow:hidden;'><div style='width:" & LargBarra & ";height:100%;background:" & CorBarra & ";border-radius:4px;'></div></div>
+          </div>
+        <div style='display:flex;justify-content:flex-start;align-items:center;font-size:9.5px;padding-top:6px;border-top:1px solid #f3f5f8;'>
+          <span style='color:#b0bac8;'>QT Disp / QT Máx · Visão T22J2 · Difere da base contratual</span>
+        </div>
+      </div>"
+    - Card Prioritarios Gerencial HTML:
+      
+      VAR TotalMedicos  = [QT MEDICOS]
+      VAR Prioritarios  = [QT MEDICOS PRIORITARIOS]
+      VAR PctPri        = DIVIDE(Prioritarios, TotalMedicos, 0)
+      VAR MesAtual      = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      VAR PctAnt        = IF(
+                            ISBLANK(MesAnterior), BLANK(),
+                            DIVIDE(
+                                CALCULATE([QT MEDICOS PRIORITARIOS], fMonitoramento[MES_AGENDA] = MesAnterior),
+                                CALCULATE([QT MEDICOS],               fMonitoramento[MES_AGENDA] = MesAnterior),
+                                0
+                            )
+                          )
+      VAR Delta         = IF(ISBLANK(PctAnt), BLANK(), PctPri - PctAnt)
+      VAR DeltaFmt      = IF(
+                            ISBLANK(Delta), "Mês base",
+                            IF(Delta >= 0,
+                                "▲ +" & FORMAT(ABS(Delta)*100, "0.0") & " p.p.",
+                                "▼ "  & FORMAT(ABS(Delta)*100, "0.0") & " p.p.")
+                          )
+      VAR CorDelta      = IF(ISBLANK(Delta) || Delta <= 0, "#14643c", "#c0392b")
+      VAR BgDelta       = IF(ISBLANK(Delta) || Delta <= 0, "#e8f5ee",  "#fdecea")
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;padding:14px 16px 12px;height:148px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #c0392b;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:8.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Médicos em Não Entregue</span>
+          <span style='font-size:12px;opacity:.5;'>⚠️</span>
+        </div>
+        <div>
+          <div style='font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#c0392b;'>" & FORMAT(Prioritarios, "#,##0") & "</div>
+          <div style='display:flex;align-items:center;gap:6px;margin-top:3px;'>
+            <span style='font-size:10px;color:#b0bac8;'>" & FORMAT(PctPri, "0.0%") & " da base elegível</span>
+            <span style='font-size:8.5px;font-weight:700;background:#fdecea;color:#c0392b;border-radius:5px;padding:1px 6px;'>Abaixo de 75%</span>
+          </div>
+          " & "<span style='display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:10px;margin-top:4px;background:" & BgDelta & ";color:" & CorDelta & ";'>" & DeltaFmt & " vs mês anterior</span>" & "
+        </div>
+        <div style='font-size:9.5px;color:#b0bac8;padding-top:6px;border-top:1px solid #f3f5f8;'>Médicos com disponibilização abaixo de 75% da capacidade histórica.</div>
+      </div>"
+    - QT MEDICOS PRIORITARIOS:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              FILTER(
+                  fMonitoramento,
+                  VAR Pct = DIVIDE(fMonitoramento[QT_MES_ATUAL], fMonitoramento[QT_MAX_6M], 0)
+                  RETURN
+                      fMonitoramento[QT_MAX_6M] > 0 && Pct < 0.75
+              ),
+              fMonitoramento[CD_MEDICO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[CD_LOCAL]
+          )
+      )
+    - QT COMPRA:
+      
+      SUMX(
+          SUMMARIZE(
+              fMonitoramento,
+              fMonitoramento[CIDADE],
+              fMonitoramento[SUB_REGIAO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[MES_AGENDA]
+          ),
+          CALCULATE(MAX(fMonitoramento[QT_COMPRA]))
+      )
+    - QT GAP META:
+      
+      SUMX(
+          FILTER(
+              fMonitoramento,
+              fMonitoramento[QT_MAX_6M] > 0 &&
+              DIVIDE(fMonitoramento[QT_MES_ATUAL], fMonitoramento[QT_MAX_6M], 0) < 0.75
+          ),
+          MAX(0, fMonitoramento[QT_MAX_6M] * 0.9 - fMonitoramento[QT_MES_ATUAL])
+      )
+    - QT GAP META COM STATUS:
+      
+      SUMX(
+          FILTER(
+              fMonitoramento,
+              fMonitoramento[QT_MAX_6M] > 0 &&
+              NOT ISBLANK(fMonitoramento[STATUS]) &&
+              DIVIDE(
+                  COALESCE(fMonitoramento[QT_MES_ATUAL], 0),
+                  fMonitoramento[QT_MAX_6M], 0
+              ) < 0.75
+          ),
+          MAX(0, fMonitoramento[QT_MAX_6M] * 0.9 - COALESCE(fMonitoramento[QT_MES_ATUAL], 0))
+      )
+    - Card Potencial Gerencial HTML:
+      
+      VAR GapTotal     = [QT GAP META]
+      VAR GapComStatus = [QT GAP META COM STATUS]
+      VAR GapSemStatus = GapTotal - GapComStatus
+      VAR PctCom       = DIVIDE(GapComStatus, GapTotal, 0)
+      VAR TotalDisp    = [QT DISP]
+      VAR TotalMax     = [QT MAX 6M]
+      VAR Aprov        = DIVIDE(TotalDisp, TotalMax, 0)
+      VAR AprovPot     = DIVIDE(TotalDisp + GapComStatus, TotalMax, 0)
+      VAR GanhoPP      = (AprovPot - Aprov) * 100
+      VAR LargAtual    = FORMAT(MIN(Aprov * 100, 100), "0") & "%"
+      VAR LargPot      = FORMAT(MIN(AprovPot * 100, 100), "0") & "%"
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;padding:14px 16px 12px;height:148px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #7b2d8b;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:8.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Potencial de Recuperação</span>
+          <span style='font-size:12px;opacity:.5;'>🎯</span>
+        </div>
+        <div>
+          <div style='font-size:22px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#7b2d8b;'>" & FORMAT(GapTotal, "#,##0") & "</div>
+          <div style='font-size:10px;color:#b0bac8;margin-top:1px;'>Consultas</div>
+          <div style='display:flex;gap:12px;margin-top:4px;'>
+            <div>
+              <div style='font-size:8.5px;color:#b0bac8;'>Ganho estimado</div>
+              <div style='font-size:12px;font-weight:800;color:#14643c;'>+" & FORMAT(GanhoPP, "0.0") & " p.p.</div>
+            </div>
+            <div>
+              <div style='font-size:8.5px;color:#b0bac8;'>Potencial</div>
+              <div style='font-size:12px;font-weight:800;color:#7b2d8b;'>" & FORMAT(AprovPot, "0.0%") & "</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style='margin-bottom:2px;'>
+            <div style='display:flex;justify-content:space-between;font-size:8px;color:#b0bac8;margin-bottom:2px;'><span>Atual " & FORMAT(Aprov,"0.0%") & "</span><span>Potencial " & FORMAT(AprovPot,"0.0%") & "</span></div>
+            <div style='height:3px;background:#f0f3f8;border-radius:4px;overflow:hidden;'><div style='width:" & LargAtual & ";height:100%;background:#c4a8e0;border-radius:4px;'></div></div>
+            <div style='height:3px;background:#f0f3f8;border-radius:4px;overflow:hidden;margin-top:2px;'><div style='width:" & LargPot & ";height:100%;background:#7b2d8b;border-radius:4px;'></div></div>
+          </div>
+          <div style='font-size:9.5px;color:#b0bac8;padding-top:4px;border-top:1px solid #f3f5f8;'>" & FORMAT(PctCom * 100, "0.0") & "% do potencial em médicos acompanhados.</div>
+        </div>
+      </div>"
+    - Grafico Utilizacao HTML:
+      
+      VAR MesesTop6 =
+          TOPN(6, ALL(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA], DESC)
+      
+      VAR MesMaisRecente =
+          MAXX(MesesTop6, fMonitoramento[MES_AGENDA])
+      
+      VAR MesesCompletos =
+          ADDCOLUMNS(
+              MesesTop6,
+              "_Disp",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT DISP], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Max",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT MAX 6M], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Label",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  VAR AnoRow = LEFT(MesRow, 4)
+                  VAR MesNumRow = MID(MesRow, 6, 2)
+                  VAR AbrevRow =
+                      SWITCH(
+                          MesNumRow,
+                          "01", "Jan", "02", "Fev", "03", "Mar", "04", "Abr",
+                          "05", "Mai", "06", "Jun", "07", "Jul", "08", "Ago",
+                          "09", "Set", "10", "Out", "11", "Nov", "12", "Dez",
+                          "?"
+                      )
+                  RETURN AbrevRow & "/" & RIGHT(AnoRow, 2),
+              "_EhRecente",
+                  fMonitoramento[MES_AGENDA] = MesMaisRecente
+          )
+      
+      VAR ListaLabels =
+          CONCATENATEX(MesesCompletos, "'" & [_Label] & "'", ",", [MES_AGENDA], ASC)
+      
+      VAR ListaMax =
+          CONCATENATEX(MesesCompletos, [_Max], ",", [MES_AGENDA], ASC)
+      
+      VAR ListaDisp =
+          CONCATENATEX(MesesCompletos, [_Disp], ",", [MES_AGENDA], ASC)
+      
+      VAR ListaMeta90 =
+          CONCATENATEX(MesesCompletos, ROUND([_Max] * 0.90, 0), ",", [MES_AGENDA], ASC)
+      
+      VAR ListaCoresDisp =
+          CONCATENATEX(
+              MesesCompletos,
+              "'" & IF([_EhRecente], "rgba(198,40,40,0.85)", "rgba(26,95,168,0.85)") & "'",
+              ",", [MES_AGENDA], ASC
+          )
+      
+      VAR ListaCoresLabel =
+          CONCATENATEX(
+              MesesCompletos,
+              "'" & IF([_EhRecente], "#C62828", "#1a5fa8") & "'",
+              ",", [MES_AGENDA], ASC
+          )
+      
+      VAR ListaLabelsDisp =
+          CONCATENATEX(MesesCompletos, "'" & FORMAT([_Disp], "#,##0") & "'", ",", [MES_AGENDA], ASC)
+      
+      VAR ListaPcts =
+          CONCATENATEX(
+              MesesCompletos,
+              "'" & FORMAT(ROUND(DIVIDE([_Disp], [_Max], 0) * 100, 1), "0.0") & "%'",
+              ",", [MES_AGENDA], ASC
+          )
+      
+      VAR ListaLabelsMax =
+          CONCATENATEX(MesesCompletos, "'" & FORMAT([_Max], "#,##0") & "'", ",", [MES_AGENDA], ASC)
+      
+      VAR MaxValGeral =
+          ROUND(MAXX(MesesCompletos, [_Max]) * 1.25, 0)
+      
+      VAR H01 = "<div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:transparent;box-sizing:border-box;display:flex;flex-direction:column;'>"
+      VAR H02 = "<div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);padding:9px 16px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'><span style='font-size:19px;font-weight:700;color:#fff;'>Utilizacao da Capacidade</span><span style='font-size:14px;color:rgba(255,255,255,.55);'>% = Aproveitamento (Disp. / Max Historico 6M) &middot; Base T22J2</span></div>"
+      VAR H03 = "<div style='position:relative;flex:1;min-height:0;background:#fff;border-radius:0 0 7px 7px;padding:4px;'><canvas id='gcap' style='position:absolute;top:0;left:0;width:100%;height:100%;'></canvas></div>"
+      
+      VAR JS01 = "<script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'></script><script>(function(){function init(){if(typeof Chart==='undefined'){setTimeout(init,80);return;}var el=document.getElementById('gcap');if(!el)return;"
+      VAR JS02 = "var maxVal=" & MaxValGeral & ";"
+      VAR JS03 = "new Chart(el.getContext('2d'),{data:{labels:[" & ListaLabels & "],datasets:["
+      
+      VAR JS04 = "{type:'bar',label:'Capacidade Maxima',data:[" & ListaMax & "],backgroundColor:'rgba(26,95,168,0.10)',borderColor:'rgba(26,95,168,0.18)',borderWidth:1,borderRadius:5,borderSkipped:false,order:2,yAxisID:'y',barPercentage:0.80,categoryPercentage:0.7,pointStyle:'rect'},"
+      
+      VAR JS05 = "{type:'bar',label:'QT Disponibilizado',data:[" & ListaDisp & "],backgroundColor:[" & ListaCoresDisp & "],borderRadius:5,borderSkipped:false,order:1,yAxisID:'y',barPercentage:0.80,categoryPercentage:0.7,pointStyle:'rect'},"
+      
+      VAR JS06 = "{type:'line',label:'Meta 90%',data:[" & ListaMeta90 & "],borderColor:'rgba(46,125,50,0.7)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,pointStyle:'line',fill:false,order:0,yAxisID:'y'}]},"
+      
+      VAR JS07 = ""
+      
+      VAR JS08 = "options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:44,right:20,bottom:2,left:4}},plugins:{legend:{display:true,position:'bottom',align:'center',usePointStyle:true,labels:{font:{size:16,family:'Segoe UI'},boxWidth:20,boxHeight:2,padding:12,color:'#6b7a99',filter:function(item){return item.text!=='Meta 90%';}}},tooltip:{backgroundColor:'rgba(13,59,110,0.92)',titleFont:{size:14,family:'Segoe UI',weight:'bold'},bodyFont:{size:14,family:'Segoe UI'},padding:10,cornerRadius:6,callbacks:{label:function(ctx){if(ctx.datasetIndex===0||ctx.datasetIndex===1)return ' '+ctx.parsed.y.toLocaleString('pt-BR');return null;}}}},"
+      
+      VAR JS09 = "scales:{x:{grid:{display:false},border:{display:false},ticks:{font:{size:15,family:'Segoe UI',weight:'600'},color:'#6b7a99',padding:6},offset:true},y:{display:false,max:maxVal}}},"
+      
+      VAR JS10 = "plugins:[{id:'lbl',afterDatasetsDraw:function(chart){var ctx=chart.ctx;var cD=[" & ListaCoresLabel & "];"
+      VAR JS11 = "var meses=[" & ListaLabelsDisp & "];"
+      VAR JS12 = "var pcts=[" & ListaPcts & "];"
+      VAR JS13 = "var maxL=[" & ListaLabelsMax & "];"
+      VAR JS14 = "var d0=chart.getDatasetMeta(0);var d1=chart.getDatasetMeta(1);var d2=chart.getDatasetMeta(2);"
+      
+      VAR JS15 = "d0.data.forEach(function(b,i){ctx.save();ctx.font='600 15px Segoe UI';ctx.fillStyle='rgba(26,95,168,0.65)';ctx.textAlign='center';ctx.fillText(maxL[i],b.x,b.y-5);ctx.restore();});"
+      
+      VAR JS16 = "d1.data.forEach(function(b,i){ctx.save();ctx.font='bold 17px Segoe UI';ctx.fillStyle=cD[i];ctx.textAlign='center';ctx.fillText(meses[i],b.x,b.y-7);"
+      VAR JS17 = "var barHeight=b.base-b.y;if(barHeight>26){ctx.font='bold 15px Segoe UI';ctx.fillStyle='rgba(255,255,255,0.92)';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(pcts[i],b.x,b.y+barHeight/2);}ctx.restore();});"
+      
+      VAR JS18 = "if(d2.data&&d2.data[0]){var yM=d2.data[0].y;ctx.save();ctx.font='bold 13px Segoe UI';ctx.fillStyle='#2E7D32';ctx.textAlign='right';ctx.fillText('Meta 90%',chart.chartArea.right,yM-5);ctx.restore();}}}]});} init();})();</script></div>"
+      
+      RETURN
+      H01 & H02 & H03 & JS01 & JS02 & JS03 & JS04 & JS05 & JS06 & JS07 & JS08 & JS09 & JS10 & JS11 & JS12 & JS13 & JS14 & JS15 & JS16 & JS17 & JS18
+      
+    - QT MEDICOS ENTREGUE:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              FILTER(
+                  fMonitoramento,
+                  fMonitoramento[QT_MAX_6M] > 0 &&
+                  DIVIDE(
+                      COALESCE(fMonitoramento[QT_MES_ATUAL], 0),
+                      fMonitoramento[QT_MAX_6M], 0
+                  ) >= 0.90
+              ),
+              fMonitoramento[CD_MEDICO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[CD_LOCAL]
+          )
+      )
+    - QT MEDICOS PARCIAL:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              FILTER(
+                  fMonitoramento,
+                  fMonitoramento[QT_MAX_6M] > 0 &&
+                  DIVIDE(
+                      COALESCE(fMonitoramento[QT_MES_ATUAL], 0),
+                      fMonitoramento[QT_MAX_6M], 0
+                  ) >= 0.75 &&
+                  DIVIDE(
+                      COALESCE(fMonitoramento[QT_MES_ATUAL], 0),
+                      fMonitoramento[QT_MAX_6M], 0
+                  ) < 0.90
+              ),
+              fMonitoramento[CD_MEDICO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[CD_LOCAL]
+          )
+      )
+    - QT MEDICOS SEM HISTORICO:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              FILTER(
+                  fMonitoramento,
+                  COALESCE(fMonitoramento[QT_MAX_6M], 0) = 0
+              ),
+              fMonitoramento[CD_MEDICO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[CD_LOCAL]
+          )
+      )
+    - Grafico Funil HTML:
+      
+      VAR Total   = [QT MEDICOS]
+      VAR Entr    = [QT MEDICOS ENTREGUE]
+      VAR Parc    = [QT MEDICOS PARCIAL]
+      VAR NEntr   = [QT MEDICOS PRIORITARIOS]
+      VAR SHist   = [QT MEDICOS SEM HISTORICO]
+      
+      -- Ordenação dinâmica dos 3 grupos do meio (maior para menor)
+      VAR G1Val = IF(NEntr >= Parc && NEntr >= Entr, NEntr, IF(Parc >= NEntr && Parc >= Entr, Parc, Entr))
+      VAR G2Val = IF(
+          (NEntr <= Parc || NEntr <= Entr) && (NEntr >= Parc || NEntr >= Entr), NEntr,
+          IF((Parc <= NEntr || Parc <= Entr) && (Parc >= NEntr || Parc >= Entr), Parc, Entr))
+      VAR G3Val = IF(NEntr <= Parc && NEntr <= Entr, NEntr, IF(Parc <= NEntr && Parc <= Entr, Parc, Entr))
+      
+      VAR G1Lbl    = IF(G1Val = NEntr, "Nao Entregue",    IF(G1Val = Parc, "Entrega Parcial", "Agenda Entregue"))
+      VAR G2Lbl    = IF(G2Val = NEntr, "Nao Entregue",    IF(G2Val = Parc, "Entrega Parcial", "Agenda Entregue"))
+      VAR G3Lbl    = IF(G3Val = NEntr, "Nao Entregue",    IF(G3Val = Parc, "Entrega Parcial", "Agenda Entregue"))
+      
+      VAR G1Cor    = IF(G1Val = NEntr, "rgba(198,40,40,0.88)",  IF(G1Val = Parc, "rgba(249,168,37,0.88)", "rgba(46,125,50,0.85)"))
+      VAR G2Cor    = IF(G2Val = NEntr, "rgba(198,40,40,0.88)",  IF(G2Val = Parc, "rgba(249,168,37,0.88)", "rgba(46,125,50,0.85)"))
+      VAR G3Cor    = IF(G3Val = NEntr, "rgba(198,40,40,0.88)",  IF(G3Val = Parc, "rgba(249,168,37,0.88)", "rgba(46,125,50,0.85)"))
+      
+      VAR G1LblCor = IF(G1Val = NEntr, "#C62828", IF(G1Val = Parc, "#c07b0a", "#2E7D32"))
+      VAR G2LblCor = IF(G2Val = NEntr, "#C62828", IF(G2Val = Parc, "#c07b0a", "#2E7D32"))
+      VAR G3LblCor = IF(G3Val = NEntr, "#C62828", IF(G3Val = Parc, "#c07b0a", "#2E7D32"))
+      
+      VAR G1Pct    = ROUND(DIVIDE(G1Val, Total, 0) * 100, 1)
+      VAR G2Pct    = ROUND(DIVIDE(G2Val, Total, 0) * 100, 1)
+      VAR G3Pct    = ROUND(DIVIDE(G3Val, Total, 0) * 100, 1)
+      VAR PctSHist = ROUND(DIVIDE(SHist, Total, 0) * 100, 1)
+      
+      VAR WG1   = FORMAT(ROUND((0.20 + DIVIDE(G1Val, Total, 0) * 0.80) * 100, 0), "0") & "%"
+      VAR WG2   = FORMAT(ROUND((0.20 + DIVIDE(G2Val, Total, 0) * 0.80) * 100, 0), "0") & "%"
+      VAR WG3   = FORMAT(ROUND((0.20 + DIVIDE(G3Val, Total, 0) * 0.80) * 100, 0), "0") & "%"
+      
+      VAR LTotal  = FORMAT(Total,  "#,##0")
+      VAR LG1     = FORMAT(G1Val,  "#,##0")
+      VAR LG2     = FORMAT(G2Val,  "#,##0")
+      VAR LG3     = FORMAT(G3Val,  "#,##0")
+      VAR LSHist  = FORMAT(SHist,  "#,##0")
+      VAR LPG1    = FORMAT(G1Pct,  "0.0") & "%"
+      VAR LPG2    = FORMAT(G2Pct,  "0.0") & "%"
+      VAR LPG3    = FORMAT(G3Pct,  "0.0") & "%"
+      VAR LPSHist = FORMAT(PctSHist, "0.0") & "%"
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;width:1042px;height:572px;background:transparent;display:flex;flex-direction:column;box-sizing:border-box;'>
+      
+      <div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);padding:9px 16px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'>
+        <span style='font-size:17px;font-weight:700;color:#fff;'>Funil de Desempenho da Base Medica</span>
+        <span style='font-size:13px;color:rgba(255,255,255,.55);'>Evolucao dos medicos elegiveis ate a entrega da meta</span>
+      </div>
+      
+      <div style='flex:1;background:#fff;border-radius:0 0 7px 7px;display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:12px;padding:22px 40px 16px;box-sizing:border-box;'>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:5px;'>
+          <span style='font-size:14px;font-weight:600;color:#3a4a60;'>Medicos Elegiveis</span>
+          <div style='margin:0 auto;width:100%;background:rgba(26,95,168,0.88);border-radius:5px;padding:11px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:18px;font-weight:800;color:#fff;line-height:1;'>" & LTotal & " medicos</span>
+            <span style='font-size:14px;color:rgba(255,255,255,.8);'>100%</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:5px;'>
+          <span style='font-size:14px;font-weight:700;color:" & G1LblCor & ";'>" & G1Lbl & "</span>
+          <div style='margin:0 auto;width:" & WG1 & ";background:" & G1Cor & ";border-radius:5px;padding:11px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:18px;font-weight:800;color:#fff;line-height:1;'>" & LG1 & " medicos</span>
+            <span style='font-size:14px;color:rgba(255,255,255,.8);'>" & LPG1 & "</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:5px;'>
+          <span style='font-size:14px;font-weight:700;color:" & G2LblCor & ";'>" & G2Lbl & "</span>
+          <div style='margin:0 auto;width:" & WG2 & ";background:" & G2Cor & ";border-radius:5px;padding:11px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:18px;font-weight:800;color:#fff;line-height:1;'>" & LG2 & " medicos</span>
+            <span style='font-size:14px;color:rgba(255,255,255,.8);'>" & LPG2 & "</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:5px;'>
+          <span style='font-size:14px;font-weight:700;color:" & G3LblCor & ";'>" & G3Lbl & "</span>
+          <div style='margin:0 auto;width:" & WG3 & ";background:" & G3Cor & ";border-radius:5px;padding:11px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:18px;font-weight:800;color:#fff;line-height:1;'>" & LG3 & " medicos</span>
+            <span style='font-size:14px;color:rgba(255,255,255,.8);'>" & LPG3 & "</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:5px;'>
+          <span style='font-size:14px;font-weight:600;color:#aab4c8;'>Sem historico</span>
+          <div style='margin:0 auto;width:18%;background:rgba(189,189,189,0.40);border-radius:5px;padding:9px 0;display:flex;flex-direction:column;align-items:center;border:1px solid rgba(189,189,189,0.3);'>
+            <span style='font-size:16px;font-weight:700;color:#6b7a99;line-height:1;'>" & LSHist & " medicos</span>
+            <span style='font-size:13px;color:#aab4c8;'>" & LPSHist & "</span>
+          </div>
+        </div>
+      
+      </div>
+      </div>"
+    - QT GAP META SEM STATUS:
+      
+      SUMX(
+          FILTER(
+              fMonitoramento,
+              fMonitoramento[QT_MAX_6M] > 0 &&
+              ISBLANK(fMonitoramento[STATUS]) &&
+              DIVIDE(
+                  COALESCE(fMonitoramento[QT_MES_ATUAL], 0),
+                  fMonitoramento[QT_MAX_6M], 0
+              ) < 0.75
+          ),
+          MAX(0, fMonitoramento[QT_MAX_6M] * 0.9 - COALESCE(fMonitoramento[QT_MES_ATUAL], 0))
+      )
+    - QT DISP FORECAST:
+      
+      SUMX(
+          SUMMARIZE(
+              fMonitoramento,
+              fMonitoramento[CIDADE],
+              fMonitoramento[SUB_REGIAO],
+              fMonitoramento[CD_ESPECIALIDADE],
+              fMonitoramento[MES_AGENDA]
+          ),
+          CALCULATE(MAX(fMonitoramento[QT_DISP_FORECAST]))
+      )
+    - Card 3 Prioritarios Gerencial HTML:
+      
+      VAR TotalMedicos  = [QT MEDICOS]
+      VAR Prioritarios  = [QT MEDICOS PRIORITARIOS]
+      VAR PctPri        = DIVIDE(Prioritarios, TotalMedicos, 0)
+      VAR MesAtual      = SELECTEDVALUE(fMonitoramento[MES_AGENDA])
+      VAR MesAnterior =
+          CALCULATE(
+              MAX(fMonitoramento[MES_AGENDA]),
+              FILTER(
+                  ALL(fMonitoramento[MES_AGENDA]),
+                  fMonitoramento[MES_AGENDA] < MesAtual
+              )
+          )
+      VAR PctAnt        = IF(
+                            ISBLANK(MesAnterior), BLANK(),
+                            DIVIDE(
+                                CALCULATE([QT MEDICOS PRIORITARIOS], fMonitoramento[MES_AGENDA] = MesAnterior),
+                                CALCULATE([QT MEDICOS],               fMonitoramento[MES_AGENDA] = MesAnterior),
+                                0
+                            )
+                          )
+      VAR Delta         = IF(ISBLANK(PctAnt), BLANK(), PctPri - PctAnt)
+      VAR DeltaFmt      = IF(
+                            ISBLANK(Delta), "Mês base",
+                            IF(Delta >= 0,
+                                "▲ +" & FORMAT(ABS(Delta)*100, "0.0") & " p.p.",
+                                "▼ "  & FORMAT(ABS(Delta)*100, "0.0") & " p.p.")
+                          )
+      VAR CorDelta      = IF(ISBLANK(Delta) || Delta <= 0, "#14643c", "#c0392b")
+      VAR BgDelta       = IF(ISBLANK(Delta) || Delta <= 0, "#e8f5ee",  "#fdecea")
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #c0392b;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Médicos em Não Entregue</span>
+          <span style='font-size:15px;opacity:.5;'>⚠️</span>
+        </div>
+        <div>
+          <div style='font-size:42px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#c0392b;'>" & FORMAT(Prioritarios, "#,##0") & "</div>
+          <div style='display:flex;align-items:center;gap:8px;margin-top:5px;'>
+            <span style='font-size:13px;color:#8694ab;'>" & FORMAT(PctPri, "0.0%") & " da base elegível</span>
+            <span style='font-size:11px;font-weight:700;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;'>Abaixo de 75%</span>
+          </div>
+          <div style='margin-top:8px;'><span style='display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:3px 9px;border-radius:10px;background:" & BgDelta & ";color:" & CorDelta & ";'>" & DeltaFmt & " vs mês anterior</span></div>
+        </div>
+        <div style='font-size:12px;color:#9aa6b8;padding-top:8px;border-top:1px solid #f3f5f8;'>Médicos com disponibilização abaixo de 75% da capacidade histórica.</div>
+      </div>"
+    - Card 4 Potencial Gerencial HTML:
+      
+      VAR GapTotal     = [QT GAP META]
+      VAR TotalDisp    = [QT DISP]
+      VAR TotalMax     = [QT MAX 6M]
+      VAR Aprov        = DIVIDE(TotalDisp, TotalMax, 0)
+      VAR AprovPot     = DIVIDE(TotalDisp + GapTotal, TotalMax, 0)
+      VAR GanhoPP      = (AprovPot - Aprov) * 100
+      VAR FaltaMetaPP  = MAX(0, (0.90 - AprovPot) * 100)
+      VAR LargAtual    = FORMAT(MIN(Aprov * 100, 100), "0") & "%"
+      VAR LargPot      = FORMAT(MIN(AprovPot * 100, 100), "0") & "%"
+      
+      VAR RodapeTxt =
+          IF(
+              AprovPot >= 0.90,
+              "Se recuperados, o aproveitamento atingiria " & FORMAT(AprovPot, "0.0%") & " supera a meta de 90%.",
+              "Se recuperados, o aproveitamento atingiria " & FORMAT(AprovPot, "0.0%") & " ainda " & FORMAT(FaltaMetaPP, "0.0") & " p.p. abaixo da meta."
+          )
+      
+      RETURN
+      IF(
+          GapTotal = 0,
+          "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border-top:2px solid #14643c;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+            <span style='font-size:34px;'>🎉</span>
+            <div style='font-size:16px;font-weight:800;color:#14643c;margin-top:8px;'>Nenhum médico crítico</div>
+            <div style='font-size:12px;color:#8694ab;margin-top:6px;line-height:1.4;'>Toda a base está entregando acima de 75% da capacidade histórica.</div>
+          </div>",
+      
+          "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #7b2d8b;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+            <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+              <span style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Potencial de Recuperação</span>
+              <span style='font-size:15px;opacity:.5;'>🎯</span>
+            </div>
+            <div>
+              <div style='font-size:34px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#7b2d8b;'>" & FORMAT(GapTotal, "#,##0") & "</div>
+              <div style='font-size:13px;color:#8694ab;margin-top:2px;'>Consultas deixadas por médicos abaixo de 75%</div>
+              <div style='display:flex;gap:20px;margin-top:8px;'>
+                <div>
+                  <div style='font-size:11px;color:#8694ab;'>Ganho estimado</div>
+                  <div style='font-size:17px;font-weight:800;color:#14643c;'>+" & FORMAT(GanhoPP, "0.0") & " p.p.</div>
+                </div>
+                <div>
+                  <div style='font-size:11px;color:#8694ab;'>Falta p/ Meta</div>
+                  <div style='font-size:17px;font-weight:800;color:#7b2d8b;'>" & FORMAT(FaltaMetaPP, "0.0") & " p.p.</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style='margin-bottom:4px;'>
+                <div style='display:flex;justify-content:space-between;font-size:11px;color:#8694ab;margin-bottom:4px;'><span>Atual " & FORMAT(Aprov,"0.0%") & "</span><span>Potencial " & FORMAT(AprovPot,"0.0%") & "</span></div>
+                <div style='height:5px;background:#f0f3f8;border-radius:4px;overflow:hidden;'><div style='width:" & LargAtual & ";height:100%;background:#c4a8e0;border-radius:4px;'></div></div>
+                <div style='height:5px;background:#f0f3f8;border-radius:4px;overflow:hidden;margin-top:3px;'><div style='width:" & LargPot & ";height:100%;background:#7b2d8b;border-radius:4px;'></div></div>
+              </div>
+              <div style='font-size:12px;color:#9aa6b8;padding-top:6px;border-top:1px solid #f3f5f8;'>" & RodapeTxt & "</div>
+            </div>
+          </div>"
+      )
+    - Card 5 Disp vs Historico HTML:
+      
+      VAR DispAtual   = [QT DISP]
+      VAR Mediana6M   = [QT MEDIANA 6M]
+      VAR Max6M       = [QT MAX 6M]
+      VAR DesvioMed   = [DESVIO MEDIANA]
+      VAR DesvioMax   = [DESVIO MAX]
+      VAR PotencialMed = MAX(0, Mediana6M - DispAtual)
+      VAR PotencialMax = MAX(0, Max6M - DispAtual)
+      
+      VAR DispAtualFmt =
+          FORMAT(DispAtual, "#,##0")
+      VAR MedianaFmt =
+          FORMAT(Mediana6M, "#,##0")
+      VAR MaxFmt =
+          FORMAT(Max6M, "#,##0")
+      VAR PotMedFmt =
+          FORMAT(PotencialMed, "#,##0")
+      VAR PotMaxFmt =
+          FORMAT(PotencialMax, "#,##0")
+      
+      VAR CorMed = IF(DesvioMed >= 0, "#14643c", "#c0392b")
+      VAR SetaMed = IF(DesvioMed >= 0, "▲", "▼")
+      VAR CorMax = IF(DesvioMax >= 0, "#14643c", "#c0392b")
+      VAR SetaMax = IF(DesvioMax >= 0, "▲", "▼")
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;background:#fff;width:404.83px;height:223px;padding:16px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;border-top:2px solid #1a5fa8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);box-sizing:border-box;'>
+      
+        <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+          <span style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;'>Disponibilizada vs Histórico</span>
+          <span style='font-size:15px;opacity:.5;'>📉</span>
+        </div>
+      
+        <div style='display:flex;align-items:baseline;gap:8px;'>
+          <span style='font-size:36px;font-weight:800;letter-spacing:-0.5px;line-height:1;color:#1a5fa8;'>" & DispAtualFmt & "</span>
+          <span style='font-size:12px;color:#8694ab;font-weight:500;'>disponibilizadas no mês</span>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;gap:8px;margin-top:2px;'>
+      
+          <div style='display:flex;align-items:center;justify-content:space-between;background:#f7f9fc;border-radius:7px;padding:7px 12px;'>
+            <div>
+              <div style='font-size:10px;color:#8694ab;font-weight:600;'>vs Mediana 6M (" & MedianaFmt & ")</div>
+              <div style='font-size:11px;color:#9aa6b8;margin-top:1px;'>Potencial " & PotMedFmt & " consultas</div>
+            </div>
+            <span style='font-size:14px;font-weight:800;color:" & CorMed & ";white-space:nowrap;'>" & SetaMed & " " & FORMAT(ABS(DesvioMed), "0%") & "</span>
+          </div>
+      
+          <div style='display:flex;align-items:center;justify-content:space-between;background:#f7f9fc;border-radius:7px;padding:7px 12px;'>
+            <div>
+              <div style='font-size:10px;color:#8694ab;font-weight:600;'>vs Máximo 6M (" & MaxFmt & ")</div>
+              <div style='font-size:11px;color:#9aa6b8;margin-top:1px;'>Potencial " & PotMaxFmt & " consultas</div>
+            </div>
+            <span style='font-size:14px;font-weight:800;color:" & CorMax & ";white-space:nowrap;'>" & SetaMax & " " & FORMAT(ABS(DesvioMax), "0%") & "</span>
+          </div>
+      
+        </div>
+      
+        <div style='font-size:11px;color:#9aa6b8;padding-top:6px;border-top:1px solid #f3f5f8;'>6M = últimos 6 meses, excluindo o mês selecionado.</div>
+      
+      </div>"
+    - Grafico Empresa HTML:
+      
+      VAR EmpresasBase =
+          SUMMARIZECOLUMNS(
+              fMonitoramento[EMPRESA],
+              "_Disp", [QT DISP],
+              "_Max", [QT MAX 6M]
+          )
+      
+      VAR EmpresasFinal =
+          ADDCOLUMNS(
+              FILTER(EmpresasBase, [_Max] > 0),
+              "_Pct", ROUND(DIVIDE([_Disp], [_Max], 0) * 100, 0),
+              "_Cor",
+                  VAR PctCalc = DIVIDE([_Disp], [_Max], 0) * 100
+                  RETURN
+                      IF(PctCalc >= 90, "rgba(20,100,60,0.85)",
+                      IF(PctCalc >= 75, "rgba(230,168,23,0.85)", "rgba(198,40,40,0.85)"))
+          )
+      
+      VAR ListaLabels =
+          CONCATENATEX(EmpresasFinal, "'" & SUBSTITUTE([EMPRESA], "'", "") & "'", ",", [_Pct], ASC)
+      
+      VAR ListaValores =
+          CONCATENATEX(EmpresasFinal, [_Pct], ",", [_Pct], ASC)
+      
+      VAR ListaCores =
+          CONCATENATEX(EmpresasFinal, "'" & [_Cor] & "'", ",", [_Pct], ASC)
+      
+      VAR ListaDispLabels =
+          CONCATENATEX(EmpresasFinal, "'" & FORMAT([_Disp], "#,##0") & "'", ",", [_Pct], ASC)
+      
+      VAR H01 = "<div style='font-family:Segoe UI,sans-serif;width:2132px;height:420px;background:transparent;box-sizing:border-box;display:flex;flex-direction:column;'>"
+      VAR H02 = "<div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);padding:9px 16px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'><span style='font-size:12px;font-weight:700;color:#fff;'>Aproveitamento por Empresa</span><span style='font-size:10px;color:rgba(255,255,255,.55);'>% = Disponibilizado / Maximo Historico 6M &middot; Meta 90%</span></div>"
+      VAR H03 = "<div style='position:relative;flex:1;min-height:0;background:#fff;border-radius:0 0 7px 7px;padding:8px;'><canvas id='gemp' style='position:absolute;top:0;left:0;width:100%;height:100%;'></canvas></div>"
+      
+      VAR JS01 = "<script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'></script><script>(function(){function init(){if(typeof Chart==='undefined'){setTimeout(init,80);return;}var el=document.getElementById('gemp');if(!el)return;"
+      
+      VAR JS02 = "new Chart(el.getContext('2d'),{type:'bar',data:{labels:[" & ListaLabels & "],datasets:[{label:'% Aproveitamento',data:[" & ListaValores & "],backgroundColor:[" & ListaCores & "],borderRadius:5,borderSkipped:false,barPercentage:0.75,categoryPercentage:0.8}]},"
+      
+      VAR JS03 = "options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:30,right:10,left:4,bottom:4}},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(13,59,110,0.92)',titleFont:{size:13,family:'Segoe UI',weight:'bold'},bodyFont:{size:12,family:'Segoe UI'},padding:10,cornerRadius:6,callbacks:{label:function(ctx){return ' '+ctx.parsed.y.toFixed(1)+'%';}}}},"
+      
+      VAR JS04 = "scales:{x:{grid:{display:false},border:{display:false},ticks:{font:{size:13,family:'Segoe UI',weight:'600'},color:'#40516d',autoSkip:false,maxRotation:45,minRotation:0}},y:{min:0,max:100,grid:{color:'rgba(0,0,0,0.04)'},border:{display:false},ticks:{callback:function(v){return v+'%';},font:{size:13,family:'Segoe UI'},color:'#b0bac8',stepSize:20}}}},"
+      
+      VAR JS05 = "plugins:[{id:'metaLine',afterDatasetsDraw:function(chart){var ctx=chart.ctx;var yScale=chart.scales.y;var yMeta=yScale.getPixelForValue(90);var area=chart.chartArea;ctx.save();ctx.strokeStyle='rgba(46,125,50,0.75)';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(area.left,yMeta);ctx.lineTo(area.right,yMeta);ctx.stroke();ctx.setLineDash([]);ctx.font='bold 12px Segoe UI';ctx.fillStyle='#2E7D32';ctx.textAlign='right';ctx.fillText('Meta 90%',area.right,yMeta-6);ctx.restore();}},"
+      
+      VAR JS06 = "{id:'valLabel',afterDatasetsDraw:function(chart){var ctx=chart.ctx;var meta=chart.getDatasetMeta(0);var cores=[" & ListaCores & "];var disps=[" & ListaDispLabels & "];meta.data.forEach(function(bar,i){var v=chart.data.datasets[0].data[i];ctx.save();ctx.font='bold 16px Segoe UI';ctx.fillStyle=cores[i].replace('0.85','1');ctx.textAlign='center';ctx.fillText(v.toFixed(0)+'%',bar.x,bar.y-8);var barHeight=bar.base-bar.y;if(barHeight>28){ctx.font='bold 13px Segoe UI';ctx.fillStyle='rgba(255,255,255,0.95)';ctx.textAlign='center';ctx.textBaseline='middle';ctx.save();ctx.translate(bar.x,(bar.y+bar.base)/2);ctx.rotate(-Math.PI/2);ctx.fillText(disps[i],0,0);ctx.restore();}ctx.restore();});}}]});} init();})();</script></div>"
+      
+      RETURN
+      H01 & H02 & H03 & JS01 & JS02 & JS03 & JS04 & JS05 & JS06
+    - Grafico Diretoria HTML:
+      
+      VAR DiretoriaBase =
+          SUMMARIZECOLUMNS(
+              fMonitoramento[DIRETORIA],
+              "_Disp", [QT DISP],
+              "_Max", [QT MAX 6M]
+          )
+      
+      VAR DiretoriaFinal =
+          ADDCOLUMNS(
+              FILTER(DiretoriaBase, [_Max] > 0),
+              "_Meta90", ROUND([_Max] * 0.90, 0),
+              "_Pct", ROUND(DIVIDE([_Disp], ROUND([_Max] * 0.90, 0), 0) * 100, 0),
+              "_Cor",
+                  VAR PctCalc = ROUND(DIVIDE([_Disp], ROUND([_Max] * 0.90, 0), 0) * 100, 0)
+                  RETURN
+                      IF(PctCalc >= 100, "#14643c",
+                      IF(PctCalc >= 75, "#d97b00", "#c0392b")),
+              "_Bg",
+                  VAR PctCalc2 = ROUND(DIVIDE([_Disp], ROUND([_Max] * 0.90, 0), 0) * 100, 0)
+                  RETURN
+                      IF(PctCalc2 >= 100, "#e8f5ee",
+                      IF(PctCalc2 >= 75, "#fff3e0", "#fdecea")),
+              "_LargBarra", FORMAT(MIN(ROUND(DIVIDE([_Disp], ROUND([_Max] * 0.90, 0), 0) * 100, 0), 100), "0") & "%"
+          )
+      
+      VAR Linhas =
+          CONCATENATEX(
+              DiretoriaFinal,
+              VAR Nome = [DIRETORIA]
+              VAR Disp = [_Disp]
+              VAR Meta = [_Meta90]
+              VAR Pct = [_Pct]
+              VAR Cor = [_Cor]
+              VAR Bg = [_Bg]
+              VAR Larg = [_LargBarra]
+              RETURN
+              "
+              <div style='display:flex;align-items:center;gap:14px;padding:11px 6px;border-bottom:1px solid #f3f5f8;'>
+                <div style='width:170px;flex-shrink:0;font-size:16px;font-weight:600;color:#3a4a60;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>" & Nome & "</div>
+                <div style='flex:1;position:relative;'>
+                  <div style='height:24px;background:#f0f3f8;border-radius:12px;overflow:hidden;'>
+                    <div style='height:100%;width:" & Larg & ";background:" & Cor & ";border-radius:12px;'></div>
+                  </div>
+                  <div style='font-size:13px;color:#8694ab;margin-top:4px;'>Disp. " & FORMAT(Disp, "#,##0") & " &middot; Meta " & FORMAT(Meta, "#,##0") & "</div>
+                </div>
+                <div style='width:90px;flex-shrink:0;text-align:right;'>
+                  <span style='font-size:20px;font-weight:800;color:" & Cor & ";'>" & Pct & "%</span>
+                </div>
+              </div>
+              ",
+              "",
+              [_Pct], ASC
+          )
+      
+      VAR H01 = "<div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:#fff;border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;'>"
+      VAR H02 = "<div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);padding:9px 16px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'><span style='font-size:19px;font-weight:700;color:#fff;'>Aproveitamento por Diretoria</span><span style='font-size:14px;color:rgba(255,255,255,.55);'>% da Meta (90% do Maximo Historico) atingido</span></div>"
+      VAR H03 = "<div style='flex:1;min-height:0;overflow-y:auto;padding:8px 14px;'>" & Linhas & "</div>"
+      
+      RETURN
+      H01 & H02 & H03 & "</div>"
+    - Card Potencial Recuperacao HTML:
+      
+      VAR TotalDisp =
+          [QT DISP]
+      
+      VAR TotalMax =
+          [QT MAX 6M]
+      
+      VAR Aprov =
+          DIVIDE(TotalDisp, TotalMax, 0)
+      
+      VAR GapSem =
+          [QT GAP META SEM STATUS]
+      
+      VAR GapCom =
+          [QT GAP META COM STATUS]
+      
+      VAR GapTotal =
+          GapSem + GapCom
+      
+      VAR PctCom =
+          ROUND(
+              DIVIDE(GapCom, GapTotal, 0) * 100,
+              1
+          )
+      
+      VAR AprovPotSem =
+          DIVIDE(
+              TotalDisp + GapSem,
+              TotalMax,
+              0
+          )
+      
+      VAR AprovPotCom =
+          DIVIDE(
+              TotalDisp + GapCom,
+              TotalMax,
+              0
+          )
+      
+      VAR GanhoPPSem =
+          ROUND(
+              (AprovPotSem - Aprov) * 100,
+              1
+          )
+      
+      VAR GanhoPPCom =
+          ROUND(
+              (AprovPotCom - Aprov) * 100,
+              1
+          )
+      
+      VAR LAprov =
+          FORMAT(Aprov * 100, "0.0") & "%"
+      
+      VAR LAprovPotSem =
+          FORMAT(AprovPotSem * 100, "0.0") & "%"
+      
+      VAR LAprovPotCom =
+          FORMAT(AprovPotCom * 100, "0.0") & "%"
+      
+      VAR LGanhoPPSem =
+          "+" & FORMAT(GanhoPPSem, "0.0") & " p.p."
+      
+      VAR LGanhoPPCom =
+          "+" & FORMAT(GanhoPPCom, "0.0") & " p.p."
+      
+      VAR LGapSem =
+          FORMAT(GapSem, "#,##0")
+      
+      VAR LGapCom =
+          FORMAT(GapCom, "#,##0")
+      
+      VAR LPctCom =
+          FORMAT(PctCom, "0.0") & "%"
+      
+      RETURN
+      "
+      <div style='
+          font-family:Segoe UI,sans-serif;
+          width:100%;
+          height:100%;
+          background:transparent;
+          display:flex;
+          flex-direction:column;
+          box-sizing:border-box;
+          overflow:hidden;
+      '>
+      
+          <!-- CABEÇALHO PRINCIPAL -->
+          <div style='
+              background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);
+              padding:10px 16px;
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+              border-radius:9px 9px 0 0;
+              flex-shrink:0;
+          '>
+      
+              <span style='
+                  font-size:12px;
+                  font-weight:700;
+                  color:#fff;
+              '>
+                  Plano de Recuperação Operacional
+              </span>
+      
+              <span style='
+                  font-size:12px;
+                  color:rgba(255,255,255,.60);
+              '>
+                  Priorização das ações para recuperação da capacidade histórica
+              </span>
+      
+          </div>
+      
+          <!-- ÁREA DOS CARDS -->
+          <div style='
+              display:flex;
+              flex-direction:row;
+              gap:12px;
+              flex:1;
+              min-height:0;
+              padding:10px 2px 2px;
+              box-sizing:border-box;
+          '>
+      
+              <!-- CARD SEM ACOMPANHAMENTO -->
+              <div style='
+                  flex:1;
+                  background:#fff;
+                  border-radius:9px;
+                  box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);
+                  overflow:hidden;
+                  display:flex;
+                  flex-direction:column;
+                  border-top:2px solid #F9A825;
+              '>
+      
+                  <div style='
+                      padding:12px 16px 9px;
+                      border-bottom:1px solid #f3f5f8;
+                      display:flex;
+                      justify-content:space-between;
+                      align-items:flex-start;
+                      background:linear-gradient(135deg,#fffdf5,#fff8e6);
+                  '>
+      
+                      <div>
+                          <div style='
+                              font-size:13px;
+                              font-weight:700;
+                              color:#1a2332;
+                          '>
+                              👤 Sem acompanhamento
+                          </div>
+      
+                          <div style='
+                              font-size:12px;
+                              color:#b0bac8;
+                              margin-top:2px;
+                          '>
+                              Elegíveis sem status e com entrega abaixo de 75%
+                          </div>
+                      </div>
+      
+                      <span style='
+                          font-size:10.5px;
+                          font-weight:700;
+                          background:#fff3cd;
+                          color:#7a5c00;
+                          border-radius:6px;
+                          padding:3px 8px;
+                          white-space:nowrap;
+                          margin-left:8px;
+                      '>
+                          🟡 Prioridade Média
+                      </span>
+      
+                  </div>
+      
+                  <div style='
+                      padding:12px 16px;
+                      display:flex;
+                      flex-direction:column;
+                      gap:6px;
+                      flex:1;
+                  '>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                          border-bottom:1px solid #f7f9fc;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              GAP para meta (90% da capacidade)
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#1a5fa8;'>
+                              " & LGapSem & " agendas
+                          </span>
+                      </div>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                          border-bottom:1px solid #f7f9fc;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              Aproveitamento atual
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#1a2332;'>
+                              " & LAprov & "
+                          </span>
+                      </div>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                          border-bottom:1px solid #f7f9fc;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              Aproveitamento potencial
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#14643c;'>
+                              " & LAprovPotSem & "
+                          </span>
+                      </div>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              Ganho estimado
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#14643c;'>
+                              " & LGanhoPPSem & "
+                          </span>
+                      </div>
+      
+                      <div style='
+                          font-size:12.5px;
+                          color:#b0bac8;
+                          font-style:italic;
+                          margin-top:4px;
+                          padding-top:8px;
+                          border-top:1px solid #f3f5f8;
+                      '>
+                          Prioridade: cadastramento de status e ativação do acompanhamento.
+                      </div>
+      
+                  </div>
+              </div>
+      
+              <!-- CARD COM ACOMPANHAMENTO -->
+              <div style='
+                  flex:1;
+                  background:#fff;
+                  border-radius:9px;
+                  box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.04);
+                  overflow:hidden;
+                  display:flex;
+                  flex-direction:column;
+                  border-top:2px solid #C62828;
+              '>
+      
+                  <div style='
+                      padding:12px 16px 9px;
+                      border-bottom:1px solid #f3f5f8;
+                      background:linear-gradient(135deg,#fff5f5,#fdecea);
+                      display:flex;
+                      justify-content:space-between;
+                      align-items:flex-start;
+                  '>
+      
+                      <div>
+                          <div style='
+                              font-size:13px;
+                              font-weight:700;
+                              color:#1a2332;
+                          '>
+                              📋 Com acompanhamento
+                          </div>
+      
+                          <div style='
+                              font-size:11px;
+                              color:#b0bac8;
+                              margin-top:2px;
+                          '>
+                              Com status registrado e entrega abaixo de 75%
+                          </div>
+                      </div>
+      
+                      <span style='
+                          font-size:10.5px;
+                          font-weight:700;
+                          background:#fdecea;
+                          color:#C62828;
+                          border-radius:6px;
+                          padding:3px 8px;
+                          white-space:nowrap;
+                          margin-left:8px;
+                      '>
+                          🔴 Prioridade Alta
+                      </span>
+      
+                  </div>
+      
+                  <div style='
+                      padding:12px 16px;
+                      display:flex;
+                      flex-direction:column;
+                      gap:6px;
+                      flex:1;
+                  '>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                          border-bottom:1px solid #f7f9fc;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              GAP para meta (90% da capacidade)
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#1a5fa8;'>
+                              " & LGapCom & " agendas
+                          </span>
+                      </div>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                          border-bottom:1px solid #f7f9fc;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              Aproveitamento atual
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#1a2332;'>
+                              " & LAprov & "
+                          </span>
+                      </div>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                          border-bottom:1px solid #f7f9fc;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              Aproveitamento potencial
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#14643c;'>
+                              " & LAprovPotCom & "
+                          </span>
+                      </div>
+      
+                      <div style='
+                          display:flex;
+                          justify-content:space-between;
+                          align-items:center;
+                          padding:5px 0;
+                      '>
+                          <span style='font-size:12.5px;color:#8694ab;'>
+                              Ganho estimado
+                          </span>
+      
+                          <span style='font-size:13px;font-weight:700;color:#14643c;'>
+                              " & LGanhoPPCom & "
+                          </span>
+                      </div>
+      
+                      <div style='
+                          background:#fdecea;
+                          border-radius:6px;
+                          padding:6px 10px;
+                          margin-top:4px;
+                          font-size:12px;
+                          font-weight:700;
+                          color:#C62828;
+                          text-align:center;
+                      '>
+                          🎯 " & LPctCom & " do potencial recuperável
+                      </div>
+      
+                      <div style='
+                          font-size:12.5px;
+                          color:#b0bac8;
+                          font-style:italic;
+                          margin-top:2px;
+                          padding-top:8px;
+                          border-top:1px solid #f3f5f8;
+                      '>
+                          Maior concentração do potencial recuperável. Ação direta sobre médicos já monitorados.
+                      </div>
+      
+                  </div>
+              </div>
+      
+          </div>
+      </div>
+      "
+    - Grafico Concentracao Barras HTML:
+      
+      VAR MesesTop6 =
+          TOPN(6, ALL(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA], DESC)
+      
+      VAR MesMaisRecente =
+          MAXX(MesesTop6, fMonitoramento[MES_AGENDA])
+      
+      VAR MesesCompletos =
+          ADDCOLUMNS(
+              MesesTop6,
+              "_GapSem",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT GAP META SEM STATUS], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_GapCom",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT GAP META COM STATUS], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Disp",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT DISP], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Max",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT MAX 6M], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Label",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  VAR AnoRow = LEFT(MesRow, 4)
+                  VAR MesNumRow = MID(MesRow, 6, 2)
+                  VAR AbrevRow =
+                      SWITCH(
+                          MesNumRow,
+                          "01", "Jan", "02", "Fev", "03", "Mar", "04", "Abr",
+                          "05", "Mai", "06", "Jun", "07", "Jul", "08", "Ago",
+                          "09", "Set", "10", "Out", "11", "Nov", "12", "Dez",
+                          "?"
+                      )
+                  RETURN AbrevRow & "/" & RIGHT(AnoRow, 2),
+              "_EhRecente",
+                  fMonitoramento[MES_AGENDA] = MesMaisRecente
+          )
+      
+      VAR MesesFinal =
+          ADDCOLUMNS(
+              MesesCompletos,
+              "_PotCom", ROUND(DIVIDE([_Disp] + [_GapCom], [_Max], 0) * 100, 2),
+              "_PotSem", ROUND(DIVIDE([_Disp] + [_GapSem], [_Max], 0) * 100, 2)
+          )
+      
+      VAR MaxTotal =
+          MAXX(MesesFinal, [_GapSem] + [_GapCom])
+      
+      VAR AlturaMax = 230
+      
+      VAR ColunasHTML =
+          CONCATENATEX(
+              MesesFinal,
+              VAR GapSemRow = [_GapSem]
+              VAR GapComRow = [_GapCom]
+              VAR TotRow = GapSemRow + GapComRow
+              VAR HSemRow = ROUND(DIVIDE(GapSemRow, MaxTotal, 0) * AlturaMax, 0)
+              VAR HComRow = ROUND(DIVIDE(GapComRow, MaxTotal, 0) * AlturaMax, 0)
+              VAR PctSemRow = FORMAT(DIVIDE(GapSemRow, TotRow, 0), "0.0%")
+              VAR PctComRow = FORMAT(DIVIDE(GapComRow, TotRow, 0), "0.0%")
+              VAR BadgeRow =
+                  IF(
+                      [_EhRecente],
+                      "<div style='font-size:10px;color:#C62828;font-weight:700;margin-bottom:4px;white-space:nowrap;'>▲ Maior potencial</div>",
+                      "<div style='font-size:10px;margin-bottom:4px;'>&nbsp;</div>"
+                  )
+              VAR LabelRow = [_Label] & IF([_EhRecente], " ⚠️", "")
+              RETURN
+                  "<div style='text-align:center;flex:1;position:relative;min-width:0;'>" &
+                  BadgeRow &
+                  "<div style='height:" & AlturaMax & "px;display:flex;flex-direction:column;justify-content:flex-end;'>" &
+                  "<div style='height:" & HComRow & "px;background:#1a5fa8;color:white;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-direction:column;border-radius:5px 5px 0 0;'>" &
+                  FORMAT(GapComRow, "#,##0") &
+                  "<span style='font-weight:400;font-size:10.5px;'>" & PctComRow & "</span></div>" &
+                  "<div style='height:" & HSemRow & "px;background:#c8d0dc;color:#263445;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-direction:column;'>" &
+                  FORMAT(GapSemRow, "#,##0") &
+                  "<span style='font-weight:400;font-size:10.5px;'>" & PctSemRow & "</span></div>" &
+                  "</div>" &
+                  "<div style='font-size:11px;color:#6b7a99;margin-top:8px;white-space:nowrap;'>" & LabelRow & "</div>" &
+                  "</div>",
+              "",
+              [MES_AGENDA], ASC
+          )
+      
+      VAR MesRef =
+          SELECTEDVALUE(fMonitoramento[MES_AGENDA], MesMaisRecente)
+      
+      VAR LinhaEncontrada =
+          FILTER(MesesFinal, [MES_AGENDA] = MesRef)
+      
+      VAR LinhaRecente =
+          FILTER(MesesFinal, [_EhRecente])
+      
+      VAR UsarEncontrada =
+          COUNTROWS(LinhaEncontrada) = 1
+      
+      VAR MesRefLbl = IF(UsarEncontrada, MAXX(LinhaEncontrada, [_Label]), MAXX(LinhaRecente, [_Label]))
+      VAR TGapCom   = IF(UsarEncontrada, MAXX(LinhaEncontrada, [_GapCom]), MAXX(LinhaRecente, [_GapCom]))
+      VAR TGapSem   = IF(UsarEncontrada, MAXX(LinhaEncontrada, [_GapSem]), MAXX(LinhaRecente, [_GapSem]))
+      VAR TPotCom   = IF(UsarEncontrada, MAXX(LinhaEncontrada, [_PotCom]), MAXX(LinhaRecente, [_PotCom]))
+      VAR TPotSem   = IF(UsarEncontrada, MAXX(LinhaEncontrada, [_PotSem]), MAXX(LinhaRecente, [_PotSem]))
+      
+      VAR LTGapCom = FORMAT(TGapCom, "#,##0")
+      VAR LTGapSem = FORMAT(TGapSem, "#,##0")
+      VAR LTPctCom = FORMAT(DIVIDE(TGapCom, TGapCom + TGapSem, 0), "0.0%")
+      VAR LTPctSem = FORMAT(DIVIDE(TGapSem, TGapCom + TGapSem, 0), "0.0%")
+      VAR LTPotCom = FORMAT(DIVIDE(TPotCom, 100, 0), "0.0%")
+      VAR LTPotSem = FORMAT(DIVIDE(TPotSem, 100, 0), "0.0%")
+      
+      VAR ComEhMaior = TGapCom >= TGapSem
+      VAR BadgeComTxt = IF(ComEhMaior, "🔴 Alta", "🟡 Média")
+      VAR BadgeComBg  = IF(ComEhMaior, "#fdecea", "#fff8e6")
+      VAR BadgeComCor = IF(ComEhMaior, "#C62828", "#7a5c00")
+      VAR BadgeSemTxt = IF(ComEhMaior, "🟡 Média", "🔴 Alta")
+      VAR BadgeSemBg  = IF(ComEhMaior, "#fff8e6", "#fdecea")
+      VAR BadgeSemCor = IF(ComEhMaior, "#7a5c00", "#C62828")
+      
+      RETURN
+      "
+      <div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:white;border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;'>
+      
+        <div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;'>
+          <b style='font-size:12px;'>Concentração do Potencial Recuperável</b>
+          <span style='font-size:12px;color:rgba(255,255,255,.55);'>Potencial de recuperação por grupo de atuação</span>
+        </div>
+      
+        <div style='height:300px;padding:22px 24px 8px;display:flex;align-items:flex-end;justify-content:space-around;gap:10px;border-bottom:1px solid #dfe5ee;'>
+          " & ColunasHTML & "
+        </div>
+      
+        <div style='display:flex;justify-content:center;gap:22px;padding:8px 10px;font-size:11px;color:#6b7a99;'>
+          <span><b style='color:#c8d0dc;'>■</b> Sem acompanhamento</span>
+          <span><b style='color:#1a5fa8;'>■</b> Com acompanhamento</span>
+        </div>
+      
+        <div style='border-top:1px solid #edf0f7;margin:0 16px 12px;padding-top:10px;'>
+          <div style='font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#b0bac8;margin-bottom:8px;'>
+            Taxa de conversão esperada · " & MesRefLbl & "
+          </div>
+      
+          <table style='width:100%;border-collapse:collapse;font-size:11px;'>
+            <thead>
+              <tr style='background:#f7f9fc;'>
+                <th style='text-align:left;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8694ab;border-bottom:1px solid #edf0f7;'>Grupo</th>
+                <th style='text-align:right;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8694ab;border-bottom:1px solid #edf0f7;'>Potencial</th>
+                <th style='text-align:right;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8694ab;border-bottom:1px solid #edf0f7;'>Participação</th>
+                <th style='text-align:right;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8694ab;border-bottom:1px solid #edf0f7;'>Aprov. Potencial</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style='background:#fff;border-bottom:1px solid #f4f6f9;'>
+                <td style='padding:7px 10px;font-weight:700;color:#1a2332;'>
+                  <span style='display:inline-block;width:8px;height:8px;border-radius:2px;background:#1a5fa8;margin-right:6px;vertical-align:middle;'></span>
+                  Com acompanhamento
+                  <span style='font-size:10px;font-weight:700;background:" & BadgeComBg & ";color:" & BadgeComCor & ";border-radius:4px;padding:1px 6px;margin-left:4px;'>" & BadgeComTxt & "</span>
+                </td>
+                <td style='padding:7px 10px;text-align:right;font-weight:700;color:#1a5fa8;'>" & LTGapCom & "</td>
+                <td style='padding:7px 10px;text-align:right;font-weight:700;color:#1a5fa8;'>" & LTPctCom & "</td>
+                <td style='padding:7px 10px;text-align:right;font-weight:700;color:#14643c;'>" & LTPotCom & "</td>
+              </tr>
+              <tr style='background:#f9fafc;'>
+                <td style='padding:7px 10px;font-weight:600;color:#3a4a60;'>
+                  <span style='display:inline-block;width:8px;height:8px;border-radius:2px;background:#c8d0dc;margin-right:6px;vertical-align:middle;'></span>
+                  Sem acompanhamento
+                  <span style='font-size:10px;font-weight:700;background:" & BadgeSemBg & ";color:" & BadgeSemCor & ";border-radius:4px;padding:1px 6px;margin-left:4px;'>" & BadgeSemTxt & "</span>
+                </td>
+                <td style='padding:7px 10px;text-align:right;color:#6b7a99;'>" & LTGapSem & "</td>
+                <td style='padding:7px 10px;text-align:right;color:#6b7a99;'>" & LTPctSem & "</td>
+                <td style='padding:7px 10px;text-align:right;font-weight:600;color:#2E7D32;'>" & LTPotSem & "</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      
+      </div>
+      "
+    - Faixa Informativa Contratual HTML:
+      
+      "
+      <div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:#eef3f9;border:1px solid #d4e0ef;border-left:3px solid #1a5fa8;border-radius:7px;padding:10px 14px;box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;'>
+      
+        <span style='font-size:15px;color:#1a5fa8;flex-shrink:0;line-height:1.4;'>ⓘ</span>
+      
+        <div style='font-size:11px;color:#3a4a60;line-height:1.55;'>
+          <b style='color:#1a5fa8;'>Metodologia dos indicadores:</b>
+          Compra e Aderência utilizam a base Forecast (T0012), que representa o volume contratual do período.
+          Já os cenários de Mediana e Máximo são calculados a partir da base T22J2, que possui histórico detalhado por médico e considera bloqueios de agenda.
+          Por utilizarem bases com finalidades distintas, podem existir diferenças entre o total disponibilizado apresentado nesta análise e o volume contratual, sem comprometer a interpretação dos indicadores.
+        </div>
+      
+      </div>
+      "
+    - Grafico Utilizacao HTML_GERENCIAL:
+      
+      VAR MesesTop6 =
+          TOPN(6, ALL(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA], DESC)
+      
+      VAR MesMaisRecente =
+          MAXX(MesesTop6, fMonitoramento[MES_AGENDA])
+      
+      VAR MesesCompletos =
+          ADDCOLUMNS(
+              MesesTop6,
+              "_Disp",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT DISP], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Max",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  RETURN CALCULATE([QT MAX 6M], REMOVEFILTERS(fMonitoramento[MES_AGENDA]), fMonitoramento[MES_AGENDA] = MesRow),
+              "_Label",
+                  VAR MesRow = fMonitoramento[MES_AGENDA]
+                  VAR AnoRow = LEFT(MesRow, 4)
+                  VAR MesNumRow = MID(MesRow, 6, 2)
+                  VAR AbrevRow =
+                      SWITCH(
+                          MesNumRow,
+                          "01", "Jan", "02", "Fev", "03", "Mar", "04", "Abr",
+                          "05", "Mai", "06", "Jun", "07", "Jul", "08", "Ago",
+                          "09", "Set", "10", "Out", "11", "Nov", "12", "Dez",
+                          "?"
+                      )
+                  RETURN AbrevRow & "/" & RIGHT(AnoRow, 2),
+              "_EhRecente",
+                  fMonitoramento[MES_AGENDA] = MesMaisRecente
+          )
+      
+      VAR ListaLabels =
+          CONCATENATEX(MesesCompletos, "'" & [_Label] & "'", ",", [MES_AGENDA], ASC)
+      
+      VAR ListaMax =
+          CONCATENATEX(MesesCompletos, [_Max], ",", [MES_AGENDA], ASC)
+      
+      VAR ListaDisp =
+          CONCATENATEX(MesesCompletos, [_Disp], ",", [MES_AGENDA], ASC)
+      
+      VAR ListaMeta90 =
+          CONCATENATEX(MesesCompletos, ROUND([_Max] * 0.90, 0), ",", [MES_AGENDA], ASC)
+      
+      VAR ListaCoresDisp =
+          CONCATENATEX(
+              MesesCompletos,
+              "'" & IF([_EhRecente], "rgba(198,40,40,0.85)", "rgba(26,95,168,0.85)") & "'",
+              ",", [MES_AGENDA], ASC
+          )
+      
+      VAR ListaCoresLabel =
+          CONCATENATEX(
+              MesesCompletos,
+              "'" & IF([_EhRecente], "#C62828", "#1a5fa8") & "'",
+              ",", [MES_AGENDA], ASC
+          )
+      
+      VAR ListaLabelsDisp =
+          CONCATENATEX(MesesCompletos, "'" & FORMAT([_Disp], "#,##0") & "'", ",", [MES_AGENDA], ASC)
+      
+      VAR ListaPcts =
+          CONCATENATEX(
+              MesesCompletos,
+              "'" & FORMAT(ROUND(DIVIDE([_Disp], [_Max], 0) * 100, 1), "0.0") & "%'",
+              ",", [MES_AGENDA], ASC
+          )
+      
+      VAR ListaLabelsMax =
+          CONCATENATEX(MesesCompletos, "'" & FORMAT([_Max], "#,##0") & "'", ",", [MES_AGENDA], ASC)
+      
+      VAR MaxValGeral =
+          ROUND(MAXX(MesesCompletos, [_Max]) * 1.25, 0)
+      
+      VAR H01 = "<div style='font-family:Segoe UI,sans-serif;width:858px;height:396px;background:transparent;box-sizing:border-box;display:flex;flex-direction:column;'>"
+      VAR H02 = "<div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);padding:9px 16px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'><span style='font-size:12px;font-weight:700;color:#fff;'>Utilizacao da Capacidade</span><span style='font-size:10px;color:rgba(255,255,255,.55);'>% = Aproveitamento (Disp. / Max Historico 6M) &middot; Base T22J2</span></div>"
+      VAR H03 = "<div style='position:relative;flex:1;min-height:0;background:#fff;border-radius:0 0 7px 7px;padding:4px;'><canvas id='gcap' style='position:absolute;top:0;left:0;width:100%;height:100%;'></canvas></div>"
+      
+      VAR JS01 = "<script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'></script><script>(function(){function init(){if(typeof Chart==='undefined'){setTimeout(init,80);return;}var el=document.getElementById('gcap');if(!el)return;"
+      VAR JS02 = "var maxVal=" & MaxValGeral & ";"
+      VAR JS03 = "new Chart(el.getContext('2d'),{data:{labels:[" & ListaLabels & "],datasets:["
+      
+      VAR JS04 = "{type:'bar',label:'Capacidade Maxima',data:[" & ListaMax & "],backgroundColor:'rgba(26,95,168,0.10)',borderColor:'rgba(26,95,168,0.18)',borderWidth:1,borderRadius:5,borderSkipped:false,order:2,yAxisID:'y',barPercentage:0.80,categoryPercentage:0.7,pointStyle:'rect'},"
+      
+      VAR JS05 = "{type:'bar',label:'QT Disponibilizado',data:[" & ListaDisp & "],backgroundColor:[" & ListaCoresDisp & "],borderRadius:5,borderSkipped:false,order:1,yAxisID:'y',barPercentage:0.80,categoryPercentage:0.7,pointStyle:'rect'},"
+      
+      VAR JS06 = "{type:'line',label:'Meta 90%',data:[" & ListaMeta90 & "],borderColor:'rgba(46,125,50,0.7)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,pointStyle:'line',fill:false,order:0,yAxisID:'y'}]},"
+      
+      VAR JS07 = ""
+      
+      VAR JS08 = "options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:44,right:20,bottom:2,left:4}},plugins:{legend:{display:true,position:'bottom',align:'center',usePointStyle:true,labels:{font:{size:10,family:'Segoe UI'},boxWidth:20,boxHeight:2,padding:10,color:'#6b7a99',filter:function(item){return item.text!=='Meta 90%';}}},tooltip:{backgroundColor:'rgba(13,59,110,0.92)',titleFont:{size:11,family:'Segoe UI',weight:'bold'},bodyFont:{size:10,family:'Segoe UI'},padding:10,cornerRadius:6,callbacks:{label:function(ctx){if(ctx.datasetIndex===0||ctx.datasetIndex===1)return ' '+ctx.parsed.y.toLocaleString('pt-BR');return null;}}}},"
+      
+      VAR JS09 = "scales:{x:{grid:{display:false},border:{display:false},ticks:{font:{size:11,family:'Segoe UI',weight:'600'},color:'#6b7a99',padding:4},offset:true},y:{display:false,max:maxVal}}},"
+      
+      VAR JS10 = "plugins:[{id:'lbl',afterDatasetsDraw:function(chart){var ctx=chart.ctx;var cD=[" & ListaCoresLabel & "];"
+      VAR JS11 = "var meses=[" & ListaLabelsDisp & "];"
+      VAR JS12 = "var pcts=[" & ListaPcts & "];"
+      VAR JS13 = "var maxL=[" & ListaLabelsMax & "];"
+      VAR JS14 = "var d0=chart.getDatasetMeta(0);var d1=chart.getDatasetMeta(1);var d2=chart.getDatasetMeta(2);"
+      
+      VAR JS15 = "d0.data.forEach(function(b,i){ctx.save();ctx.font='600 12px Segoe UI';ctx.fillStyle='rgba(26,95,168,0.65)';ctx.textAlign='center';ctx.fillText(maxL[i],b.x,b.y-5);ctx.restore();});"
+      
+      VAR JS16 = "d1.data.forEach(function(b,i){ctx.save();ctx.font='bold 12px Segoe UI';ctx.fillStyle=cD[i];ctx.textAlign='center';ctx.fillText(meses[i],b.x,b.y-7);"
+      VAR JS17 = "var barHeight=b.base-b.y;if(barHeight>20){ctx.font='bold 12px Segoe UI';ctx.fillStyle='rgba(255,255,255,0.92)';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(pcts[i],b.x,b.y+barHeight/2);}ctx.restore();});"
+      
+      VAR JS18 = "if(d2.data&&d2.data[0]){var yM=d2.data[0].y;ctx.save();ctx.font='bold 9px Segoe UI';ctx.fillStyle='#2E7D32';ctx.textAlign='right';ctx.fillText('Meta 90%',chart.chartArea.right,yM-5);ctx.restore();}}}]});} init();})();</script></div>"
+      
+      RETURN
+      H01 & H02 & H03 & JS01 & JS02 & JS03 & JS04 & JS05 & JS06 & JS07 & JS08 & JS09 & JS10 & JS11 & JS12 & JS13 & JS14 & JS15 & JS16 & JS17 & JS18
+    - Grafico Funil HTML_GERENCIAL:
+      
+      VAR Total   = [QT MEDICOS]
+      VAR Entr    = [QT MEDICOS ENTREGUE]
+      VAR Parc    = [QT MEDICOS PARCIAL]
+      VAR NEntr   = [QT MEDICOS PRIORITARIOS]
+      VAR SHist   = [QT MEDICOS SEM HISTORICO]
+      
+      -- Ordenação dinâmica dos 3 grupos do meio (maior para menor)
+      VAR G1Val = IF(NEntr >= Parc && NEntr >= Entr, NEntr, IF(Parc >= NEntr && Parc >= Entr, Parc, Entr))
+      VAR G2Val = IF(
+          (NEntr <= Parc || NEntr <= Entr) && (NEntr >= Parc || NEntr >= Entr), NEntr,
+          IF((Parc <= NEntr || Parc <= Entr) && (Parc >= NEntr || Parc >= Entr), Parc, Entr))
+      VAR G3Val = IF(NEntr <= Parc && NEntr <= Entr, NEntr, IF(Parc <= NEntr && Parc <= Entr, Parc, Entr))
+      
+      VAR G1Lbl    = IF(G1Val = NEntr, "Nao Entregue",    IF(G1Val = Parc, "Entrega Parcial", "Agenda Entregue"))
+      VAR G2Lbl    = IF(G2Val = NEntr, "Nao Entregue",    IF(G2Val = Parc, "Entrega Parcial", "Agenda Entregue"))
+      VAR G3Lbl    = IF(G3Val = NEntr, "Nao Entregue",    IF(G3Val = Parc, "Entrega Parcial", "Agenda Entregue"))
+      
+      VAR G1Cor    = IF(G1Val = NEntr, "rgba(198,40,40,0.88)",  IF(G1Val = Parc, "rgba(249,168,37,0.88)", "rgba(46,125,50,0.85)"))
+      VAR G2Cor    = IF(G2Val = NEntr, "rgba(198,40,40,0.88)",  IF(G2Val = Parc, "rgba(249,168,37,0.88)", "rgba(46,125,50,0.85)"))
+      VAR G3Cor    = IF(G3Val = NEntr, "rgba(198,40,40,0.88)",  IF(G3Val = Parc, "rgba(249,168,37,0.88)", "rgba(46,125,50,0.85)"))
+      
+      VAR G1LblCor = IF(G1Val = NEntr, "#C62828", IF(G1Val = Parc, "#c07b0a", "#2E7D32"))
+      VAR G2LblCor = IF(G2Val = NEntr, "#C62828", IF(G2Val = Parc, "#c07b0a", "#2E7D32"))
+      VAR G3LblCor = IF(G3Val = NEntr, "#C62828", IF(G3Val = Parc, "#c07b0a", "#2E7D32"))
+      
+      VAR G1Pct    = ROUND(DIVIDE(G1Val, Total, 0) * 100, 1)
+      VAR G2Pct    = ROUND(DIVIDE(G2Val, Total, 0) * 100, 1)
+      VAR G3Pct    = ROUND(DIVIDE(G3Val, Total, 0) * 100, 1)
+      VAR PctSHist = ROUND(DIVIDE(SHist, Total, 0) * 100, 1)
+      
+      VAR WG1   = FORMAT(ROUND((0.20 + DIVIDE(G1Val, Total, 0) * 0.80) * 100, 0), "0") & "%"
+      VAR WG2   = FORMAT(ROUND((0.20 + DIVIDE(G2Val, Total, 0) * 0.80) * 100, 0), "0") & "%"
+      VAR WG3   = FORMAT(ROUND((0.20 + DIVIDE(G3Val, Total, 0) * 0.80) * 100, 0), "0") & "%"
+      
+      VAR LTotal  = FORMAT(Total,  "#,##0")
+      VAR LG1     = FORMAT(G1Val,  "#,##0")
+      VAR LG2     = FORMAT(G2Val,  "#,##0")
+      VAR LG3     = FORMAT(G3Val,  "#,##0")
+      VAR LSHist  = FORMAT(SHist,  "#,##0")
+      VAR LPG1    = FORMAT(G1Pct,  "0.0") & "%"
+      VAR LPG2    = FORMAT(G2Pct,  "0.0") & "%"
+      VAR LPG3    = FORMAT(G3Pct,  "0.0") & "%"
+      VAR LPSHist = FORMAT(PctSHist, "0.0") & "%"
+      
+      RETURN
+      "<div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:transparent;display:flex;flex-direction:column;box-sizing:border-box;'>
+      
+      <div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);padding:9px 16px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'>
+        <span style='font-size:12px;font-weight:700;color:#fff;'>Funil de Desempenho da Base Medica</span>
+        <span style='font-size:10px;color:rgba(255,255,255,.55);'>Evolucao dos medicos elegiveis ate a entrega da meta</span>
+      </div>
+      
+      <div style='flex:1;background:#fff;border-radius:0 0 7px 7px;display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:6px;padding:14px 24px 10px;box-sizing:border-box;'>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:2px;'>
+          <span style='font-size:9.5px;font-weight:600;color:#3a4a60;'>Medicos Elegiveis</span>
+          <div style='margin:0 auto;width:100%;background:rgba(26,95,168,0.88);border-radius:5px;padding:6px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:12px;font-weight:800;color:#fff;line-height:1;'>" & LTotal & " medicos</span>
+            <span style='font-size:10px;color:rgba(255,255,255,.8);'>100%</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:2px;'>
+          <span style='font-size:9.5px;font-weight:700;color:" & G1LblCor & ";'>" & G1Lbl & "</span>
+          <div style='margin:0 auto;width:" & WG1 & ";background:" & G1Cor & ";border-radius:5px;padding:6px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:12px;font-weight:800;color:#fff;line-height:1;'>" & LG1 & " medicos</span>
+            <span style='font-size:10px;color:rgba(255,255,255,.8);'>" & LPG1 & "</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:2px;'>
+          <span style='font-size:9.5px;font-weight:700;color:" & G2LblCor & ";'>" & G2Lbl & "</span>
+          <div style='margin:0 auto;width:" & WG2 & ";background:" & G2Cor & ";border-radius:5px;padding:6px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:12px;font-weight:800;color:#fff;line-height:1;'>" & LG2 & " medicos</span>
+            <span style='font-size:10px;color:rgba(255,255,255,.8);'>" & LPG2 & "</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:2px;'>
+          <span style='font-size:9.5px;font-weight:700;color:" & G3LblCor & ";'>" & G3Lbl & "</span>
+          <div style='margin:0 auto;width:" & WG3 & ";background:" & G3Cor & ";border-radius:5px;padding:6px 0;display:flex;flex-direction:column;align-items:center;'>
+            <span style='font-size:12px;font-weight:800;color:#fff;line-height:1;'>" & LG3 & " medicos</span>
+            <span style='font-size:10px;color:rgba(255,255,255,.8);'>" & LPG3 & "</span>
+          </div>
+        </div>
+      
+        <div style='display:flex;flex-direction:column;align-items:center;gap:2px;'>
+          <span style='font-size:9.5px;font-weight:600;color:#aab4c8;'>Sem historico</span>
+          <div style='margin:0 auto;width:18%;background:rgba(189,189,189,0.40);border-radius:5px;padding:5px 0;display:flex;flex-direction:column;align-items:center;border:1px solid rgba(189,189,189,0.3);'>
+            <span style='font-size:11px;font-weight:700;color:#6b7a99;line-height:1;'>" & LSHist & " medicos</span>
+            <span style='font-size:9.5px;color:#aab4c8;'>" & LPSHist & "</span>
+          </div>
+        </div>
+      
+      </div>
+      </div>"
+    - Visao Contratual Resumo HTML:
+      
+      VAR TotalDisp  = [QT DISP FORECAST]
+      VAR TotalComp  = [QT COMPRA]
+      VAR Aderencia  = DIVIDE(TotalDisp, TotalComp, 0)
+      
+      VAR NecCor =
+          IF(Aderencia >= 0.94, "#2E7D32",
+          IF(Aderencia >= 0.90, "#c07b0a", "#C62828"))
+      
+      VAR NecBg =
+          IF(Aderencia >= 0.94, "#e8f5ee",
+          IF(Aderencia >= 0.90, "#fff8e6", "#fdecea"))
+      
+      VAR NecTxt =
+          IF(Aderencia >= 0.94, "🟢 Acima de 94%",
+          IF(Aderencia >= 0.90, "🟡 Entre 90% e 94%", "🔴 Inferior a 90%"))
+      
+      VAR MesesValidos =
+          VALUES(fMonitoramento[MES_AGENDA])
+      
+      VAR CidadesValidas =
+          VALUES(fMonitoramento[CD_LOCALIDADE_CIDADE])
+      
+      VAR EspecialidadesValidas =
+          VALUES(fMonitoramento[CD_ESPECIALIDADE])
+      
+      VAR ComboBase =
+          FILTER(
+              ALL(FORECAST_UNIVERSO_COMPLETO),
+              FORECAST_UNIVERSO_COMPLETO[MES] IN MesesValidos &&
+              FORECAST_UNIVERSO_COMPLETO[CD_LOCALIDADE_CIDADE] IN CidadesValidas &&
+              FORECAST_UNIVERSO_COMPLETO[CD_ESPECIALIDADE] IN EspecialidadesValidas
+          )
+      
+      VAR ComboValido =
+          FILTER(ComboBase, [QT_COMPRA_UNIVERSO] > 0)
+      
+      VAR ComboSemMistas =
+          FILTER(
+              ComboValido,
+              VAR EspAtual    = [CD_ESPECIALIDADE]
+              VAR CidadeAtual = [CD_LOCALIDADE_CIDADE]
+              VAR MesAtual    = [MES]
+              VAR EhMista =
+                  CALCULATE(
+                      COUNTROWS(AGENDAS_MISTAS_HISTORICO),
+                      FILTER(
+                          ALL(AGENDAS_MISTAS_HISTORICO),
+                          AGENDAS_MISTAS_HISTORICO[CD_ESPECIALIDADE] = EspAtual &&
+                          AGENDAS_MISTAS_HISTORICO[CD_LOCALIDADE] = CidadeAtual &&
+                          AGENDAS_MISTAS_HISTORICO[MES_ANO] = MesAtual
+                      )
+                  )
+              RETURN
+                  EhMista = 0
+          )
+      
+      VAR TotalCombos =
+          COUNTROWS(ComboSemMistas)
+      
+      VAR CombosOK =
+          COUNTROWS(
+              FILTER(
+                  ComboSemMistas,
+                  DIVIDE([QT_DISP_UNIVERSO], [QT_COMPRA_UNIVERSO], 0) >= 0.90
+              )
+          )
+      
+      VAR PctForecast =
+          DIVIDE(CombosOK, TotalCombos, 0)
+      
+      VAR ForecastCor =
+          IF(PctForecast >= 0.90, "#2E7D32", "#C62828")
+      
+      VAR ForecastBg =
+          IF(PctForecast >= 0.90, "#e8f5ee", "#fdecea")
+      
+      VAR ForecastTxt =
+          IF(PctForecast >= 0.90, "✅ Entregue", "❌ Não Entregue")
+      
+      VAR EspBase =
+          SUMMARIZECOLUMNS(
+              fMonitoramento[DS_ESPECIALIDADE],
+              "_DISP", [QT DISP FORECAST],
+              "_COMP", [QT COMPRA],
+              "_MED", SUM(fMonitoramento[QT_MEDIANA_6M]),
+              "_MAX", SUM(fMonitoramento[QT_MAX_6M])
+          )
+      
+      VAR EspCols =
+          SELECTCOLUMNS(
+              EspBase,
+              "_ESP", fMonitoramento[DS_ESPECIALIDADE],
+              "_DISP", [_DISP],
+              "_COMP", [_COMP],
+              "_MED", [_MED],
+              "_MAX", [_MAX]
+          )
+      
+      VAR EspFinal =
+          ADDCOLUMNS(
+              FILTER(EspCols, [_COMP] > 0),
+              "_GAP", MAX([_COMP] - [_DISP], 0),
+              "_ADER", DIVIDE([_DISP], [_COMP], 0),
+              "_PCTMED", DIVIDE([_MED], [_COMP], 0),
+              "_PCTMAX", DIVIDE([_MAX], [_COMP], 0)
+          )
+      
+      VAR SubBase =
+          SUMMARIZECOLUMNS(
+              fMonitoramento[DS_ESPECIALIDADE],
+              fMonitoramento[SUB_REGIAO],
+              "_DISP", [QT DISP FORECAST],
+              "_COMP", [QT COMPRA],
+              "_MED", SUM(fMonitoramento[QT_MEDIANA_6M]),
+              "_MAX", SUM(fMonitoramento[QT_MAX_6M])
+          )
+      
+      VAR SubCols =
+          SELECTCOLUMNS(
+              SubBase,
+              "_ESP", fMonitoramento[DS_ESPECIALIDADE],
+              "_SUB", fMonitoramento[SUB_REGIAO],
+              "_DISP", [_DISP],
+              "_COMP", [_COMP],
+              "_MED", [_MED],
+              "_MAX", [_MAX]
+          )
+      
+      VAR SubFinal =
+          ADDCOLUMNS(
+              FILTER(SubCols, [_COMP] > 0),
+              "_GAP", MAX([_COMP] - [_DISP], 0),
+              "_ADER", DIVIDE([_DISP], [_COMP], 0),
+              "_PCTMED", DIVIDE([_MED], [_COMP], 0),
+              "_PCTMAX", DIVIDE([_MAX], [_COMP], 0)
+          )
+      
+      VAR QtdNaoAtingiram =
+          COUNTROWS(FILTER(SubFinal, [_ADER] < 0.90))
+      
+      VAR QtdMediana =
+          COUNTROWS(FILTER(SubFinal, [_ADER] < 0.90 && [_PCTMED] >= 0.90))
+      
+      VAR QtdMaximo =
+          COUNTROWS(FILTER(SubFinal, [_ADER] < 0.90 && [_PCTMED] < 0.90 && [_PCTMAX] >= 0.90))
+      
+      VAR QtdCaptacao =
+          COUNTROWS(FILTER(SubFinal, [_ADER] < 0.90 && [_PCTMAX] < 0.90))
+      
+      VAR PctSegMediana  = DIVIDE(QtdMediana, QtdNaoAtingiram, 0)
+      VAR PctSegMaximo   = DIVIDE(QtdMaximo, QtdNaoAtingiram, 0)
+      VAR PctSegCaptacao = DIVIDE(QtdCaptacao, QtdNaoAtingiram, 0)
+      
+      RETURN
+      "
+      <div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:#fff;border-radius:9px 9px 0 0;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);display:flex;flex-direction:column;box-sizing:border-box;'>
+      
+      <div style='background:linear-gradient(135deg,#0d3b6e 0%,#1a5fa8 100%);color:#fff;padding:11px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;'>
+        <div>
+          <div style='font-size:15px;font-weight:700;'>Visão Contratual e Especialidades Prioritárias</div>
+          <div style='font-size:12px;color:rgba(255,255,255,.68);margin-top:2px;'>Compra contratada x disponibilização · priorização por menor aderência</div>
+        </div>
+        <div style='font-size:11px;color:rgba(255,255,255,.8);font-weight:600;'>Meta contratual: 90%</div>
+      </div>
+      
+      <div style='padding:14px 18px 12px;'>
+      
+        <div style='display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:start;'>
+      
+          <div>
+            <div style='font-size:44px;font-weight:800;letter-spacing:-1.5px;line-height:1;color:" & ForecastCor & ";'>" & FORMAT(PctForecast, "0.00%") & "</div>
+            <div style='font-size:13.5px;color:#40516d;margin-top:4px;font-weight:600;'>% Aderencia ao Forecast</div>
+            <div style='font-size:11px;color:#8694ab;margin-top:2px;'>" & CombosOK & " de " & TotalCombos & " combinações Especialidade + Sub-região ≥ 90% da meta (universo completo, exclui mistas)</div>
+            <div style='display:inline-flex;align-items:center;gap:4px;margin-top:7px;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;background:" & ForecastBg & ";color:" & ForecastCor & ";'>" & ForecastTxt & "</div>
+          </div>
+      
+          <div style='padding-left:24px;border-left:1px solid #edf0f7;'>
+            <div style='font-size:34px;font-weight:800;color:#C62828;line-height:1;'>" & FORMAT(QtdNaoAtingiram, "#,##0") & "</div>
+            <div style='font-size:12px;color:#40516d;font-weight:600;margin-top:3px;'>não atingiram 90% de aderência</div>
+            <div style='font-size:9.5px;color:#aab4c8;margin-top:1px;font-style:italic;'>contagem por combinação Especialidade + Sub-região</div>
+      
+            <div style='margin-top:12px;'>
+              <div style='display:flex;height:26px;border-radius:6px;overflow:hidden;width:100%;'>
+                <div style='display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;width:" & FORMAT(PctSegMediana,"0%") & ";background:#2E7D32;'>" & IF(QtdMediana>0, FORMAT(QtdMediana,"#,##0"), "") & "</div>
+                <div style='display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;width:" & FORMAT(PctSegMaximo,"0%") & ";background:#c07b0a;'>" & IF(QtdMaximo>0, FORMAT(QtdMaximo,"#,##0"), "") & "</div>
+                <div style='display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;width:" & FORMAT(PctSegCaptacao,"0%") & ";background:#C62828;'>" & IF(QtdCaptacao>0, FORMAT(QtdCaptacao,"#,##0"), "") & "</div>
+              </div>
+              <div style='display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;'>
+                <div style='display:flex;align-items:center;gap:5px;font-size:10.5px;color:#40516d;'><span style='width:8px;height:8px;border-radius:2px;flex-shrink:0;background:#2E7D32;display:inline-block;'></span>" & FORMAT(QtdMediana,"#,##0") & " recuperam pela mediana (" & FORMAT(PctSegMediana,"0.0%") & ")</div>
+                <div style='display:flex;align-items:center;gap:5px;font-size:10.5px;color:#40516d;'><span style='width:8px;height:8px;border-radius:2px;flex-shrink:0;background:#c07b0a;display:inline-block;'></span>" & FORMAT(QtdMaximo,"#,##0") & " precisam do máximo (" & FORMAT(PctSegMaximo,"0.0%") & ")</div>
+                <div style='display:flex;align-items:center;gap:5px;font-size:10.5px;color:#40516d;'><span style='width:8px;height:8px;border-radius:2px;flex-shrink:0;background:#C62828;display:inline-block;'></span>" & FORMAT(QtdCaptacao,"#,##0") & " exigem captação (" & FORMAT(PctSegCaptacao,"0.0%") & ")</div>
+              </div>
+            </div>
+          </div>
+      
+        </div>
+      
+        <div style='margin-top:14px;padding:8px 12px;background:#eef3f9;border-left:3px solid #1a5fa8;border-radius:6px;font-size:12px;color:#3a4a60;display:flex;align-items:center;gap:8px;'>
+          <span style='font-size:15px;color:#1a5fa8;flex-shrink:0;'>ⓘ</span>
+          <span>
+            <b>% Entrega de Necessidade:</b> " & FORMAT(Aderencia, "0.00%") & "
+            <span style='display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;background:" & NecBg & ";color:" & NecCor & ";'>" & NecTxt & "</span>
+            &nbsp;·&nbsp; Σ Disponibilizado / Σ Compra
+          </span>
+        </div>
+      
+      </div>
+      
+      <div style='border-top:1px solid #dfe5ee;'>
+      <table style='width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px;'>
+      <colgroup>
+        <col style='width:21.43%;'>
+        <col style='width:9.38%;'>
+        <col style='width:10.54%;'>
+        <col style='width:8.93%;'>
+        <col style='width:7.86%;'>
+        <col style='width:11.43%;'>
+        <col style='width:10.54%;'>
+        <col style='width:10.54%;'>
+        <col style='width:9.38%;'>
+      </colgroup>
+      <thead>
+      <tr>
+        <th style='background:#f8fafd;text-align:left;padding:8px 12px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>Especialidade</th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>Compra</th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>Disponibilizado</th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#111827;'>GAP</th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>% GAP</th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#111827;'>Aderência ↑</th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>Mediana<br><span style='font-weight:500;'>(Total / %)</span></th>
+        <th style='background:#f8fafd;text-align:right;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>Máximo<br><span style='font-weight:500;'>(Total / %)</span></th>
+        <th style='background:#f8fafd;text-align:center;padding:8px 10px;font-size:11.5px;font-weight:700;text-transform:uppercase;color:#40516d;'>Obs.</th>
+      </tr>
+      </thead>
+      </table>
+      </div>
+      
+      </div>
+      "
+    - Visao Contratual Tabela HTML:
+      
+      VAR TotalComp  = [QT COMPRA]
+      
+      VAR EspBase =
+          SUMMARIZECOLUMNS(
+              fMonitoramento[DS_ESPECIALIDADE],
+              "_DISP", [QT DISP FORECAST],
+              "_COMP", [QT COMPRA],
+              "_MED", SUM(fMonitoramento[QT_MEDIANA_6M]),
+              "_MAX", SUM(fMonitoramento[QT_MAX_6M])
+          )
+      
+      VAR EspCols =
+          SELECTCOLUMNS(
+              EspBase,
+              "_ESP", fMonitoramento[DS_ESPECIALIDADE],
+              "_DISP", [_DISP],
+              "_COMP", [_COMP],
+              "_MED", [_MED],
+              "_MAX", [_MAX]
+          )
+      
+      VAR EspFinal =
+          ADDCOLUMNS(
+              FILTER(EspCols, [_COMP] > 0),
+              "_GAP", MAX([_COMP] - [_DISP], 0),
+              "_ADER", DIVIDE([_DISP], [_COMP], 0),
+              "_PART", DIVIDE(MAX([_COMP] - [_DISP], 0), [_COMP], 0),
+              "_PCTMED", DIVIDE([_MED], [_COMP], 0),
+              "_PCTMAX", DIVIDE([_MAX], [_COMP], 0)
+          )
+      
+      VAR SubBase =
+          SUMMARIZECOLUMNS(
+              fMonitoramento[DS_ESPECIALIDADE],
+              fMonitoramento[SUB_REGIAO],
+              "_DISP", [QT DISP FORECAST],
+              "_COMP", [QT COMPRA],
+              "_MED", SUM(fMonitoramento[QT_MEDIANA_6M]),
+              "_MAX", SUM(fMonitoramento[QT_MAX_6M])
+          )
+      
+      VAR SubCols =
+          SELECTCOLUMNS(
+              SubBase,
+              "_ESP", fMonitoramento[DS_ESPECIALIDADE],
+              "_SUB", fMonitoramento[SUB_REGIAO],
+              "_DISP", [_DISP],
+              "_COMP", [_COMP],
+              "_MED", [_MED],
+              "_MAX", [_MAX]
+          )
+      
+      VAR SubFinal =
+          ADDCOLUMNS(
+              FILTER(SubCols, [_COMP] > 0),
+              "_GAP", MAX([_COMP] - [_DISP], 0),
+              "_ADER", DIVIDE([_DISP], [_COMP], 0),
+              "_PART", DIVIDE(MAX([_COMP] - [_DISP], 0), [_COMP], 0),
+              "_PCTMED", DIVIDE([_MED], [_COMP], 0),
+              "_PCTMAX", DIVIDE([_MAX], [_COMP], 0)
+          )
+      
+      VAR Header =
+      "
+      <div style='font-family:Segoe UI,sans-serif;width:100%;height:100%;background:#fff;border-radius:0 0 9px 9px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);display:flex;flex-direction:column;box-sizing:border-box;'>
+      
+      <div style='flex:1;min-height:0;overflow:auto;'>
+      <table style='width:100%;border-collapse:collapse;table-layout:fixed;font-size:12.5px;color:#13233a;'>
+      <colgroup>
+        <col style='width:21.43%;'>
+        <col style='width:9.38%;'>
+        <col style='width:10.54%;'>
+        <col style='width:8.93%;'>
+        <col style='width:7.86%;'>
+        <col style='width:11.43%;'>
+        <col style='width:10.54%;'>
+        <col style='width:10.54%;'>
+        <col style='width:9.38%;'>
+      </colgroup>
+      <tbody>
+      "
+      
+      VAR Linhas =
+          CONCATENATEX(
+              EspFinal,
+              VAR Esp = [_ESP]
+              VAR Comp = [_COMP]
+              VAR Disp = [_DISP]
+              VAR Gap = [_GAP]
+              VAR Part = [_PART]
+              VAR Ader = [_ADER]
+              VAR Med = [_MED]
+              VAR MaxHist = [_MAX]
+              VAR PctMed = [_PCTMED]
+              VAR PctMax = [_PCTMAX]
+      
+              VAR EspId =
+                  "e_" & SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(Esp," ",""),"/","_"),"(","_"),")","_"),".","_")
+      
+              VAR QtdSubRegioes =
+                  COUNTROWS(FILTER(SubFinal, [_ESP] = Esp))
+      
+              VAR TemDetalhamento =
+                  QtdSubRegioes > 1
+      
+              VAR CorAder =
+                  IF(Ader >= 0.94, "#008A22",
+                  IF(Ader >= 0.90, "#D98200", "#C62828"))
+      
+              VAR ObsTxt =
+                  IF(
+                      Ader >= 0.90,
+                      "—",
+                      IF(PctMed >= 0.90, "🟢 Mediana",
+                      IF(PctMax >= 0.90, "🟡 Máximo", "🔴 Captação"))
+                  )
+      
+              VAR ObsBg =
+                  IF(
+                      Ader >= 0.90,
+                      "transparent",
+                      IF(PctMed >= 0.90, "#e8f5ee",
+                      IF(PctMax >= 0.90, "#fff8e6", "#fdecea"))
+                  )
+      
+              VAR ObsCor =
+                  IF(
+                      Ader >= 0.90,
+                      "#9aa6b8",
+                      IF(PctMed >= 0.90, "#008A22",
+                      IF(PctMax >= 0.90, "#c07b0a", "#C62828"))
+                  )
+      
+              VAR AtributosLinha =
+                  IF(
+                      TemDetalhamento,
+                      "data-id='" & EspId & "' onclick=""toggleEl('" & EspId & "')"" style='border-bottom:1px solid #edf0f7;cursor:pointer;background:#fff;'",
+                      "style='border-bottom:1px solid #edf0f7;background:#fff;'"
+                  )
+      
+              VAR IconeEsp =
+                  IF(
+                      TemDetalhamento,
+                      "<span class='drill-icon' style='display:inline-block;margin-right:6px;font-size:10px;color:#1a5fa8;transition:transform .2s;'>▶</span>",
+                      "<span style='display:inline-block;margin-right:6px;width:10px;'></span>"
+                  )
+      
+              VAR LinhaEsp =
+              "
+              <tr " & AtributosLinha & ">
+                <td style='padding:8px 12px;font-weight:700;color:#13233a;white-space:normal;'>" & IconeEsp & Esp & "</td>
+                <td style='padding:8px 10px;text-align:right;color:#13233a;font-weight:400;'>" & FORMAT(Comp, "#,##0") & "</td>
+                <td style='padding:8px 10px;text-align:right;color:#13233a;font-weight:400;'>" & FORMAT(Disp, "#,##0") & "</td>
+                <td style='padding:8px 10px;text-align:right;font-weight:500;color:" & IF(Gap > 0, "#C00000", "#008A22") & ";'>" & IF(Gap > 0, FORMAT(Gap, "#,##0"), "—") & "</td>
+                <td style='padding:8px 10px;text-align:right;font-weight:500;color:" & IF(Part >= 0.25, "#C62828", IF(Part >= 0.10, "#D98200", "#6b7a99")) & ";'>" & FORMAT(Part, "0.00%") & "</td>
+                <td style='padding:8px 10px;text-align:right;font-weight:700;color:" & CorAder & ";'>" & FORMAT(Ader, "0.00%") & "</td>
+      
+                <td style='padding:7px 10px;text-align:right;'>
+                  <div style='font-weight:400;color:#13233a;'>" & FORMAT(Med, "#,##0") & "</div>
+                  <div style='font-size:11px;font-weight:500;color:" & IF(PctMed >= 0.90, "#008A22", "#D98200") & ";'>" & FORMAT(PctMed, "0.0%") & "</div>
+                </td>
+      
+                <td style='padding:7px 10px;text-align:right;'>
+                  <div style='font-weight:400;color:#13233a;'>" & FORMAT(MaxHist, "#,##0") & "</div>
+                  <div style='font-size:11px;font-weight:500;color:" & IF(PctMax >= 0.90, "#008A22", "#C62828") & ";'>" & FORMAT(PctMax, "0.0%") & "</div>
+                </td>
+      
+                <td style='padding:8px 10px;text-align:center;'>
+                  <span style='font-size:9.5px;font-weight:500;border-radius:7px;padding:3px 8px;white-space:nowrap;background:" & ObsBg & ";color:" & ObsCor & ";'>" & ObsTxt & "</span>
+                </td>
+              </tr>
+              "
+      
+              VAR SubRows =
+                  CONCATENATEX(
+                      FILTER(SubFinal, [_ESP] = Esp),
+                      VAR Sub = [_SUB]
+                      VAR SComp = [_COMP]
+                      VAR SDisp = [_DISP]
+                      VAR SGap = [_GAP]
+                      VAR SPart = [_PART]
+                      VAR SAder = [_ADER]
+                      VAR SMed = [_MED]
+                      VAR SMax = [_MAX]
+                      VAR SPctMed = [_PCTMED]
+                      VAR SPctMax = [_PCTMAX]
+      
+                      VAR SCorAder =
+                          IF(SAder >= 0.94, "#008A22",
+                          IF(SAder >= 0.90, "#D98200", "#C62828"))
+      
+                      VAR SObsTxt =
+                          IF(SAder >= 0.90, "—",
+                          IF(SPctMed >= 0.90, "🟢 Mediana",
+                          IF(SPctMax >= 0.90, "🟡 Máximo", "🔴 Captação")))
+      
+                      VAR SObsBg =
+                          IF(SAder >= 0.90, "transparent",
+                          IF(SPctMed >= 0.90, "#e8f5ee",
+                          IF(SPctMax >= 0.90, "#fff8e6", "#fdecea")))
+      
+                      VAR SObsCor =
+                          IF(SAder >= 0.90, "#9aa6b8",
+                          IF(SPctMed >= 0.90, "#008A22",
+                          IF(SPctMax >= 0.90, "#c07b0a", "#C62828")))
+      
+                      RETURN
+                      "
+                      <tr data-parent='" & EspId & "' style='display:none;border-bottom:1px solid #f3f5f8;background:#f7f9fc;'>
+                        <td style='padding:6px 12px 6px 40px;color:#3a4a60;font-size:11.5px;'>📍 " & Sub & "</td>
+                        <td style='padding:6px 10px;text-align:right;color:#3a4a60;font-size:11.5px;'>" & FORMAT(SComp, "#,##0") & "</td>
+                        <td style='padding:6px 10px;text-align:right;color:#3a4a60;font-size:11.5px;'>" & FORMAT(SDisp, "#,##0") & "</td>
+                        <td style='padding:6px 10px;text-align:right;font-size:11.5px;color:" & IF(SGap > 0, "#C00000", "#008A22") & ";'>" & IF(SGap > 0, FORMAT(SGap, "#,##0"), "—") & "</td>
+                        <td style='padding:6px 10px;text-align:right;font-size:11.5px;color:" & IF(SPart >= 0.25, "#C62828", IF(SPart >= 0.10, "#D98200", "#6b7a99")) & ";'>" & FORMAT(SPart, "0.00%") & "</td>
+                        <td style='padding:6px 10px;text-align:right;font-weight:600;font-size:11.5px;color:" & SCorAder & ";'>" & FORMAT(SAder, "0.00%") & "</td>
+                        <td style='padding:6px 10px;text-align:right;font-size:11px;'>
+                          <div style='color:#3a4a60;'>" & FORMAT(SMed, "#,##0") & "</div>
+                          <div style='font-size:10px;color:" & IF(SPctMed >= 0.90, "#008A22", "#D98200") & ";'>" & FORMAT(SPctMed, "0.0%") & "</div>
+                        </td>
+                        <td style='padding:6px 10px;text-align:right;font-size:11px;'>
+                          <div style='color:#3a4a60;'>" & FORMAT(SMax, "#,##0") & "</div>
+                          <div style='font-size:10px;color:" & IF(SPctMax >= 0.90, "#008A22", "#C62828") & ";'>" & FORMAT(SPctMax, "0.0%") & "</div>
+                        </td>
+                        <td style='padding:6px 10px;text-align:center;'>
+                          <span style='font-size:9px;font-weight:500;border-radius:6px;padding:2px 7px;white-space:nowrap;background:" & SObsBg & ";color:" & SObsCor & ";'>" & SObsTxt & "</span>
+                        </td>
+                      </tr>
+                      ",
+                      "",
+                      [_ADER], ASC
+                  )
+      
+              RETURN LinhaEsp & IF(TemDetalhamento, SubRows, "")
+              ,
+              "",
+              [_ADER], ASC,
+              [_COMP], DESC
+          )
+      
+      VAR Footer =
+      "
+      </tbody>
+      </table>
+      </div>
+      
+      <div style='padding:7px 12px;border-top:1px solid #edf0f7;background:#f9fafc;font-size:9.5px;color:#8694ab;flex-shrink:0;'>
+        🟢 Mediana: recupera a meta com comportamento médio histórico ·
+        🟡 Máximo: exige retorno ao pico histórico ·
+        🔴 Captação: nem o máximo histórico cobre a meta contratual &nbsp;·&nbsp; ▶ clique na especialidade para ver as sub-regiões
+      </div>
+      
+      <script>
+      function toggleEl(id){
+        var rows = document.querySelectorAll('[data-parent=' + id + ']');
+        rows.forEach(function(el){
+          var visivel = el.style.display === 'table-row';
+          el.style.display = visivel ? 'none' : 'table-row';
+        });
+        var icon = document.querySelector('[data-id=' + id + '] .drill-icon');
+        if(icon){
+          icon.style.transform = (icon.style.transform === 'rotate(90deg)') ? 'rotate(0deg)' : 'rotate(90deg)';
+        }
+      }
+      </script>
+      
+      </div>
+      "
+      
+      RETURN
+      Header & Linhas & Footer
+----------------------------------------
+Tabela: fMonitoramento
+  Colunas:
+    - CD_MEDICO [int64]
+    - CD_ESPECIALIDADE [int64]
+    - CD_LOCAL [int64]
+    - STATUS [string]
+    - RESPONSAVEL [string]
+    - ADERENCIA_PCT [double]
+    - MES_AGENDA [string]
+    - FL_DISP_MES_ATUAL [string]
+    - QT_MES_ATUAL [double]
+    - QT_MEDIANA_6M [double]
+    - QT_MAX_6M [int64]
+    - QT_MESES_COM_DISP [int64]
+    - DT_CARGA [dateTime]
+    - CD_TIPO [int64]
+    - CD_PGTO [int64]
+    - NM_MEDICO [string]
+    - NM_UNIDADE [string]
+    - NM_FILIAL [string]
+    - CIDADE [string]
+    - EMPRESA [string]
+    - DS_REGIONAL [string]
+    - UF [string]
+    - POLO [string]
+    - DS_ESPECIALIDADE [string]
+    - DS_TIPO [string]
+    - DS_PGTO [string]
+    - RECORRENCIA [string]
+    - DIAS_ZERADOS [int64]
+    - QT_COMPRA [double]
+    - RISCO MAX COL [string] (Calculada)
+    - QT_DISP_FORECAST [double]
+    - CD_LOCALIDADE_CIDADE [string]
+    - SUB_REGIAO [string]
+    - CHAVE_COMBO [string]
+    - Status Aderencia [string] (Calculada)
+    - CD_CIDADE_IBGE [string]
+    - DIRETOR [string]
+    - DIRETORIA [string]
+    - CLASSIFICACAO_NOVA [string]
+----------------------------------------
+Tabela: AGENDAS_MISTAS_HISTORICO
+  Colunas:
+    - CD_LOCALIDADE [string]
+    - COD_FILIAL [string]
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+    - NM_CIDADE [string]
+    - UF [string]
+    - MES_ANO [string]
+----------------------------------------
+Tabela: FORECAST_UNIVERSO_COMPLETO
+  Colunas:
+    - CD_LOCALIDADE_CIDADE [string]
+    - SUB_REGIAO [string]
+    - CD_ESPECIALIDADE [int64]
+    - MES [string]
+    - QT_COMPRA_UNIVERSO [int64]
+    - QT_DISP_UNIVERSO [int64]
+    - CHAVE_COMBO [string]
+----------------------------------------
+Tabela: DIRETORIA_UNIFICADA
+  Colunas:
+    - ID [string]
+    - CD_MUNICIPIO [string]
+    - NM_CIDADE [string]
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+    - CD_CLASSIFICACAO [int64]
+    - DS_CLASSIFICACAO [string]
+    - CASSIFICAÇÃO NOVA [string]
+    - DIRETOR [string]
+    - DIRETORIA [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+dCalendario[DATA_MES] ---> LocalDateTable_05051829-6e27-4550-a645-7604a68ef4f1[Date]
+fMonitoramento[DT_CARGA] ---> LocalDateTable_8b384c4d-6e83-4ac3-ab9b-b7ddca22e58b[Date]
+fMonitoramento[CHAVE_COMBO] ---> FORECAST_UNIVERSO_COMPLETO[CHAVE_COMBO]

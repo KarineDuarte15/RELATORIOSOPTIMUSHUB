@@ -1,0 +1,148 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatório Atraso dos Médicos.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: DIM_ESPECIALIDADE
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - NM_ESPECIALIDADE [string]
+----------------------------------------
+Tabela: DIM_PRESTADOR
+  Colunas:
+    - CD_MEDICO [int64]
+    - NM_MEDICO [string]
+----------------------------------------
+Tabela: DIM_LOCAL
+  Colunas:
+    - CD_LOCAL [int64]
+    - NM_FANTASIA [string]
+    - NM_CIDADE [string]
+    - NM_FILIAL [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - LOCALIZAÇÃO [string]
+    - TIPO [string]
+    - CIDADE | UNIDADE [string]
+----------------------------------------
+Tabela: FATO_ATRASO_MEDICO
+  Colunas:
+    - CD_LOCAL [int64]
+    - CD_MEDICO [int64]
+    - CD_ESPECIALIDADE [int64]
+    - TEMPO ATRASO [double]
+    - DATA [dateTime]
+----------------------------------------
+Tabela: #MEDIDAS
+  Medidas DAX (Regras de Negócio):
+    - Qtde Atrasos:
+      COUNTROWS(FATO_ATRASO_MEDICO)
+    - Tempo Total Atraso:
+      SUM(FATO_ATRASO_MEDICO[TEMPO ATRASO])
+    - Qtde Atrasos Dinamico:
+      
+      CALCULATE(
+          [Qtde Atrasos],
+          FILTER(
+              FATO_ATRASO_MEDICO,
+              [Tempo Total Atraso]* 60 > [Valor Parâmetro]
+      ))
+    - Tempo Total Atraso Dinamico:
+      
+      CALCULATE(
+          [Tempo Total Atraso],
+          FILTER(
+              FATO_ATRASO_MEDICO,
+              [Tempo Total Atraso]* 60 > [Valor Parâmetro]
+      ))
+      
+    - Média de Atrasos:
+      
+      VAR vHorasDecimal = DIVIDE([Tempo Total Atraso Dinamico] , [Qtde Atrasos Dinamico])
+      VAR vHoras = INT(vHorasDecimal)
+      VAR vMinutosDecimal = 60 * (vHorasDecimal - vHoras)
+      VAR vMinutos = INT(vMinutosDecimal)
+      VAR vSegundos = ROUND( 60 * (vMinutosDecimal - vMinutos), 0 )
+      VAR vHH = IF(LEN(vHoras) = 1 , "0" & vHoras, vHoras)
+      VAR vMM = IF(LEN(vMinutos) = 1 , "0" & vMinutos, vMinutos)
+      VAR vSS = IF(LEN(vSegundos) = 1 , "0" & vSegundos, vSegundos)
+      RETURN
+      CONVERT(vHH&vMM&vSS, INTEGER)
+      
+    - Total Atraso Dinamico Formato hh:mm:ss:
+      
+      VAR vTempoAtraso = 
+          CALCULATE(
+              [Tempo Total Atraso],
+              FILTER(
+                  FATO_ATRASO_MEDICO,
+                  [Tempo Total Atraso] * 60 >= [Valor Parâmetro]
+              )
+          )
+      VAR vHoras = INT(vTempoAtraso)
+      VAR vMinutosDecimal = 60 * (vTempoAtraso - vHoras)
+      VAR vMinutos = INT(vMinutosDecimal)
+      VAR vSegundos = ROUND( 60 * (vMinutosDecimal - vMinutos), 0 )
+      /*
+      VAR vHH = CONVERT(CONVERT(IF(LEN(vHoras) >= 1 , "0" & vHoras, vHoras),INTEGER),STRING)
+      VAR vMM = CONVERT(IF(LEN(vMinutos) >= 1 , "0" & vMinutos, vMinutos),INTEGER)
+      VAR vSS = CONVERT(IF(LEN(vSegundos) >= 1 , "0" & vSegundos, vSegundos), INTEGER)
+      */
+      RETURN
+      VALUE(vHoras & vMinutos & vSegundos)
+    - Data Atualização:
+      "Atualizado em: " & SELECTEDVALUE('#ATUALIZAÇÃO'[#ATUALIZAÇÃO])
+    - ##Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+      
+      
+----------------------------------------
+Tabela: ParâmetroTolerância
+  Colunas:
+    - Parâmetro [int64]
+  Medidas DAX (Regras de Negócio):
+    - Valor Parâmetro:
+      SELECTEDVALUE('ParâmetroTolerância'[Parâmetro])
+----------------------------------------
+Tabela: CALENDARIO
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mês [string]
+    - Num.Mês [int64]
+    - Dia [int64]
+    - Dia/Mes [string]
+    - NumDiaSemana [int64]
+    - Dia+Semana [string]
+    - MesAno [string]
+    - DiaSemana [string]
+    - ClassifMesAno [double]
+    - MesNomeAno [string]
+    - NomeMês [string]
+----------------------------------------
+Tabela: #ATUALIZAÇÃO
+  Colunas:
+    - #ATUALIZAÇÃO [dateTime]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+FATO_ATRASO_MEDICO[CD_LOCAL] ---> DIM_LOCAL[CD_LOCAL]
+FATO_ATRASO_MEDICO[CD_MEDICO] ---> DIM_PRESTADOR[CD_MEDICO]
+FATO_ATRASO_MEDICO[CD_ESPECIALIDADE] ---> DIM_ESPECIALIDADE[CD_ESPECIALIDADE]
+CALENDARIO[Date] ---> LocalDateTable_5fb26018-74a0-487d-9a41-ac5fd1e24f90[Date]
+FATO_ATRASO_MEDICO[DATA] ---> CALENDARIO[Date]
+#ATUALIZAÇÃO[#ATUALIZAÇÃO] ---> LocalDateTable_76f54fa9-8649-4e50-b323-aae8ee9975a8[Date]

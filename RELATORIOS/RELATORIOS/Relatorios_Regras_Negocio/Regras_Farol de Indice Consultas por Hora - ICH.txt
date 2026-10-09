@@ -1,0 +1,2592 @@
+============================================================
+MAPEAMENTO DE REGRAS: Farol de Indice Consultas por Hora - ICH.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: fProdutividade
+  Colunas:
+    - CD_PRESTADOR [int64]
+    - CD_ESPECIALIDADE [int64]
+    - CD_LOCAL [int64]
+    - Qtd. Consultas [int64]
+    - Qtd. Retorno [int64]
+    - Atendimento Geral [int64]
+    - Qtd. Horas [double]
+    - DATA [dateTime]
+    - Meta [decimal]
+    - TP_PGTO [int64]
+    - QTE_LIMITE [int64]
+    - ANO [int64]
+    - DIA [int64]
+    - MÊS [int64]
+    - ID_DIRETORIA [int64]
+    - QTE_CONSULTAS [double]
+    - QTE_MARCADAS [double]
+    - QTE_CANCELADAS [double]
+    - QTE_EFETIVADAS [double]
+    - QTE_ENCAIXE [double]
+    - QTE_ENCAIXE_EFET [double]
+    - QTE_RETORNO [double]
+    - QTE_RETORNO_EFET [double]
+    - QT_USUARIOS [double]
+    - QT_USUARIOS_30MIN [double]
+    - QT_FALTA_MED [double]
+    - QT_FALTA_PAC [double]
+    - QT_REM_MED [double]
+    - QT_REM_ADM [double]
+    - QT_REM_PAC [double]
+    - CD_CIDADE_IBGE [double]
+----------------------------------------
+Tabela: #MEDIDAS
+  Medidas DAX (Regras de Negócio):
+    - Qtde Consultas:
+      SUM( fProdutividade[Qtd. Consultas] )
+    - Qtde Retorno:
+      SUM( fProdutividade[Qtd. Retorno] )
+    - Qtde Horas:
+      SUM ( fProdutividade[Qtd. Horas] )
+    - Produtividade:
+      DIVIDE( [Total Atendimentos] , [Qtde Horas] ) 
+    - Produtividade Mes Atual:
+      
+      VAR MaxData =
+          CALCULATE(
+              MAX(dCalendario[Date]),
+              ALL(dCalendario)
+          )
+      VAR MesAnoMax =
+          CALCULATE(
+              MAX(dCalendario[Mes_Ano]),
+              FILTER(ALL(dCalendario), dCalendario[Date] = MaxData)
+          )
+      VAR AtendMes =
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              FILTER(ALL(dCalendario), dCalendario[Mes_Ano] = MesAnoMax)
+          )
+      VAR HorasMes =
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(ALL(dCalendario), dCalendario[Mes_Ano] = MesAnoMax)
+          )
+      RETURN
+      DIVIDE(AtendMes, HorasMes)
+      
+    - Qtde Consultas Mes Atual:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Consultas]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] = YEAR(TODAY()) && dCalendario[Mes] = MONTH(TODAY())
+          )
+      )
+    - Qtde Horas Mes Atual:
+      
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual )
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior )
+          )
+      RETURN
+      IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+    - Qtde Retorno Mes Atual:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Retorno]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] = YEAR(TODAY()) && dCalendario[Mes] = MONTH(TODAY())
+          )
+      )
+    - Total Atendimentos:
+      SUM( fProdutividade[Atendimento Geral] )
+    - Total Atendimentos Mes Atual:
+      
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual )
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior )
+          )
+      RETURN
+      IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+    - Qtde Consultas MoM:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Consultas]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] = YEAR(EOMONTH(TODAY(), -1)) &&
+              dCalendario[Mes] = MONTH(EOMONTH(TODAY(), -1))
+          )
+      )
+    - Qtde Consultas YoY:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Consultas]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] = YEAR(TODAY()) - 1 &&
+              dCalendario[Mes] = MONTH(TODAY())
+          )
+      )
+      
+    - Qtde Horas MoM:
+      
+      VAR _MaxData =
+          MAX ( dCalendario[Date] )
+      VAR _AnoAnterior =
+          YEAR ( EOMONTH ( _MaxData, -1 ) )
+      VAR _MesAnterior =
+          MONTH ( EOMONTH ( _MaxData, -1 ) )
+      RETURN
+      CALCULATE (
+          SUM ( fProdutividade[Qtd. Horas] ),
+          FILTER (
+              dCalendario,
+              dCalendario[Ano] = _AnoAnterior
+                  && dCalendario[Mes] = _MesAnterior
+          )
+      )
+      
+      
+      
+    - Qtde Horas YoY:
+      
+      VAR _MaxData =
+          MAX ( dCalendario[Date] )
+      VAR _AnoRef =
+          YEAR ( _MaxData )
+      VAR _MesRef =
+          MONTH ( _MaxData )
+      RETURN
+      CALCULATE (
+          SUM ( fProdutividade[Qtd. Horas] ),
+          FILTER (
+              dCalendario,
+              dCalendario[Ano] = _AnoRef - 1
+                  && dCalendario[Mes] = _MesRef
+          )
+      )
+      
+      
+      
+      
+    - Qtde Retorno MoM:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Retorno]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] = YEAR(EOMONTH(TODAY(), -1)) &&
+              dCalendario[Mes] = MONTH(EOMONTH(TODAY(), -1))
+          )
+      )
+      
+    - Total Atendimentos MoM:
+      
+      VAR _MaxData =
+          MAX ( dCalendario[Date] )
+      VAR _AnoAnterior =
+          YEAR ( EOMONTH ( _MaxData, -1 ) )
+      VAR _MesAnterior =
+          MONTH ( EOMONTH ( _MaxData, -1 ) )
+      RETURN
+      CALCULATE (
+          SUM ( fProdutividade[Atendimento Geral] ),
+          FILTER (
+              dCalendario,
+              dCalendario[Ano] = _AnoAnterior
+                  && dCalendario[Mes] = _MesAnterior
+          )
+      )
+      
+    - Qtde Retorno YoY:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Retorno]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] = YEAR(TODAY()) - 1 &&
+              dCalendario[Mes] = MONTH(TODAY())
+          )
+      )
+    - Total Atendimentos YoY:
+      
+      VAR _MaxData =
+          MAX ( dCalendario[Date] )
+      VAR _AnoRef =
+          YEAR ( _MaxData )
+      VAR _MesRef =
+          MONTH ( _MaxData )
+      RETURN
+      CALCULATE (
+          SUM ( fProdutividade[Atendimento Geral] ),
+          FILTER (
+              dCalendario,
+              dCalendario[Ano] = _AnoRef - 1
+                  && dCalendario[Mes] = _MesRef
+          )
+      )
+      
+    - Produtividade MoM:
+      DIVIDE( [Total Atendimentos MoM] , [Qtde Horas MoM] )
+    - Produtividade YoY:
+      DIVIDE( [Total Atendimentos YoY] , [Qtde Horas YoY] )
+    - Produtividade MoM Card:
+      
+      VAR _MAtual = [Produtividade Mes Atual]
+      VAR _MAnterior = [Produtividade MoM]
+      RETURN
+      IF ( 
+          _MAnterior > _MAtual, 
+          FORMAT(_MAnterior, "0.00") & " ⬇",  
+          FORMAT(_MAnterior, "0.00") & " ⬆"
+      )
+      
+    - Produtividade YoY Card:
+      
+      VAR _MAtual = [Produtividade Mes Atual]
+      VAR _MAnterior = [Produtividade YoY]
+      RETURN
+      IF ( 
+          _MAnterior > _MAtual, 
+          FORMAT(_MAnterior, "0.00") & " ⬇",  
+          FORMAT(_MAnterior, "0.00") & " ⬆"
+      )
+      
+    - Format Cond Prod.:
+      
+      VAR _Medida = [Produtividade Mes Atual]
+      RETURN
+      IF ( _Medida > 4.96 , "GREEN", "RED")
+    - Format Cond Prod MAnt:
+      
+      VAR _MAtual = [Produtividade Mes Atual]
+      VAR _MAnterior = [Produtividade MoM]
+      RETURN
+      IF ( 
+          _MAnterior > _MAtual, 
+          "RED" , "GREEN"
+      )
+    - Format Cond Prod YAnt:
+      
+      VAR _MAtual = [Produtividade Mes Atual]
+      VAR _MAnterior = [Produtividade YoY]
+      RETURN
+      IF ( 
+          _MAnterior > _MAtual, 
+          "RED" , "GREEN"
+      )
+    - Produtividade Ano Atual:
+      
+      CALCULATE(
+          DIVIDE([Total Atendimentos], [Qtde Horas]),
+          dCalendario[Ano] = YEAR(TODAY())
+      )
+      
+    - % Representação:
+      
+      VAR _MesAnterior = EDATE(TODAY(), -1)
+      VAR _Ano = YEAR(_MesAnterior)
+      VAR _Mes = MONTH(_MesAnterior)
+      
+      VAR _HorasEmpresaMesAnterior =
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  dCalendario,
+                  dCalendario[Ano] = _Ano &&
+                  dCalendario[Mes] = _Mes
+              )
+          )
+      
+      VAR _HorasTotalMesAnterior =
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  ALL(dCalendario),                     -- Remove filtro da data
+                  dCalendario[Ano] = _Ano &&
+                  dCalendario[Mes] = _Mes
+              ),
+              REMOVEFILTERS(dMetaEmpresa[EMPRESA UNIF])  -- Remove filtro de empresa
+          )
+      
+      RETURN
+      DIVIDE(_HorasEmpresaMesAnterior, _HorasTotalMesAnterior)
+      
+    - Produtividade Regional I:
+      
+      VAR _vRegional = "REGIONAL I"
+      VAR TotalAtendimentos = 
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              FILTER(
+                  RELATEDTABLE(dCidade),
+                  dCidade[REGIONAL] = _vRegional
+              )
+          )
+      VAR QtdeHoras = 
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  RELATEDTABLE(dCidade),
+                  dCidade[REGIONAL] = _vRegional
+              )
+          )
+      RETURN
+          ROUND(DIVIDE(TotalAtendimentos, QtdeHoras),2)
+    - Produtividade Regional II:
+      
+      VAR _vRegional = "REGIONAL II"
+      VAR TotalAtendimentos = 
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              FILTER(
+                  RELATEDTABLE(dCidade),
+                  dCidade[REGIONAL] = _vRegional
+              )
+          )
+      VAR QtdeHoras = 
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  RELATEDTABLE(dCidade),
+                  dCidade[REGIONAL] = _vRegional
+              )
+          )
+      RETURN
+          ROUND(DIVIDE(TotalAtendimentos, QtdeHoras),2)
+    - Produtividade Regional I Mês Atual:
+      
+      VAR _vRegional = "REGIONAL I"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - Produtividade Regional II Mês Atual:
+      
+      VAR _vRegional = "REGIONAL II"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIONAL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - TesteSVG:
+      
+      VAR vPrefixo = "data:image/svg+xml;utf8,"
+      RETURN
+      vPrefixo & 
+      "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='20'><rect width='100' height='20' fill='blue'/></svg>"
+      
+    - Produtividade Regional II - Variação Mês a Mês:
+      
+      VAR MedidaAtual = [Produtividade Regional II]
+      VAR MedidaAnterior = 
+          CALCULATE(
+              [Produtividade Regional II],
+              PARALLELPERIOD(dCalendario[Date], -1, MONTH)
+          )
+      RETURN
+          IF(
+              ISBLANK(MedidaAnterior),
+              BLANK(),
+              DIVIDE(MedidaAtual - MedidaAnterior, MedidaAnterior)
+          )
+      
+    - Produtividade Regional I - Variação Mês a Mês:
+      
+      VAR MedidaAtual = [Produtividade Regional I]
+      VAR MedidaAnterior = 
+          CALCULATE(
+              [Produtividade Regional I],
+              PARALLELPERIOD(dCalendario[Date], -1, MONTH)
+          )
+      RETURN
+          IF(
+              ISBLANK(MedidaAnterior),
+              BLANK(),
+              DIVIDE(MedidaAtual - MedidaAnterior, MedidaAnterior)
+          )
+      
+    - Format Cond Variacao Regional I:
+      
+      VAR _Medida =  [Produtividade Regional I - Variação Mês a Mês]
+      RETURN
+      IF ( _Medida >= 0 , "GREEN" , "RED" )
+      
+    - Format Cond Variacao Regional II:
+      
+      VAR _Medida =  [Produtividade Regional I - Variação Mês a Mês]
+      RETURN
+      IF ( _Medida >= 0 , "GREEN" , "RED" )
+      
+    - 01. Jan/25:
+      
+      VAR _MesAno = "Jan/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 2. Fev/25:
+      
+      VAR _MesAno = "Fev/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 3. Mar/25:
+      
+      VAR _MesAno = "Mar/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 4. Abr/25:
+      
+      VAR _MesAno = "Abr/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 5. Mai/25:
+      
+      VAR _MesAno = "Mai/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - Meta Atual:
+      
+      IF(
+          ISINSCOPE(dMetaEmpresa[EMPRESA UNIF]),
+          CALCULATE(
+              MAX(fProdutividade[Meta]),
+              dCalendario[Mes_Ano] = FORMAT(TODAY(), "MMM/YY")
+          ),
+          -- Valor para o total (fora do escopo do Mes_Ano)
+          4.96
+      )
+      
+    - Performance:
+      
+      DIVIDE( [Produtividade Mes Atual] , [Meta Empresa] )
+    - Var Prod MoM:
+      
+      VAR _ProdAtual = [Produtividade Mes Atual]
+      VAR _ProdAnterior = [Produtividade MoM]
+      RETURN
+      _ProdAtual - _ProdAnterior
+    - 01. Format Mes Jan:
+      
+      IF ( [01. Jan/25] > [Meta Empresa], "GREEN" , "RED" )
+    - Meta Empresa:
+      
+      VAR _Meta = SELECTEDVALUE( dMetaEmpresa[META] )
+      RETURN
+      IF(
+          ISINSCOPE(dMetaEmpresa[EMPRESA UNIF]),
+          _Meta,
+          -- Valor para o total (fora do escopo do Mes_Ano)
+          4.96
+      )
+      
+    - Meta Desafio:
+      
+      VAR _Meta = SELECTEDVALUE( dMetaEmpresa[DESAFIO] )
+      RETURN
+      IF(
+          ISINSCOPE(dMetaEmpresa[EMPRESA UNIF]),
+          _Meta,
+          5.10
+      )
+    - Performance Desafio:
+      
+      DIVIDE( [Produtividade Mes Atual] , [Meta Desafio] )
+    - 2. Format Mes Fev:
+      
+      IF ( [2. Fev/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 3. Format Mes Mar:
+      
+      IF ( [3. Mar/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 4. Format Mes Abr:
+      
+      IF ( [4. Abr/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 5. Format Mes Mai:
+      
+      IF ( [5. Mai/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - Format Max e Min R1:
+      
+      VAR _Medida = [Produtividade Regional I]
+      VAR _ValorMaximo = 
+          MAXX(
+              ALLSELECTED(dCalendario[Mes_Ano], dCalendario[Classif_MesAno]),
+              [Produtividade Regional I]
+          )
+      VAR _ValorMinimo = 
+          MINX(
+              ALLSELECTED(dCalendario[Mes_Ano], dCalendario[Classif_MesAno]),
+              [Produtividade Regional I]
+          )
+      RETURN
+      SWITCH(
+          TRUE(),
+          _Medida = _ValorMaximo, "#81C784",
+          _Medida = _ValorMinimo, "#E57373",
+          "#1A63FA"
+      )
+      
+    - Format Max e Min R2:
+      
+      VAR _Medida = [Produtividade Regional II]
+      VAR _ValorMaximo = 
+          MAXX(
+              ALLSELECTED(dCalendario[Mes_Ano], dCalendario[Classif_MesAno]),
+              [Produtividade Regional II]
+          )
+      VAR _ValorMinimo = 
+          MINX(
+              ALLSELECTED(dCalendario[Mes_Ano], dCalendario[Classif_MesAno]),
+              [Produtividade Regional II]
+          )
+      RETURN
+      SWITCH(
+          TRUE(),
+          _Medida = _ValorMaximo, "#81C784",
+          _Medida = _ValorMinimo, "#E57373",
+          "#FF8800"
+      )
+      
+    - Meta Reg2:
+      4.5
+    - Meta Reg1:
+      5.5
+    - Meta Máx Reg2:
+      [Meta Reg2] * 1.20
+    - Meta Máx Reg1:
+      [Meta Reg1] * 1.20
+    - Produtividade Região Norte:
+      
+      VAR _vRegional = "Norte"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - Produtividade Região Sul:
+      
+      VAR _vRegional = "Sul"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - Produtividade Região Nordeste:
+      
+      VAR _vRegional = "Nordeste"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - Produtividade Região Centro Oeste:
+      
+      VAR _vRegional = "Centro-Oeste"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - Produtividade Região Sudeste:
+      
+      VAR _vRegional = "Sudeste"
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Atendimentos
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR AtendMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR TotalAtendimentos =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnterior )
+      
+      -- Horas
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR HorasMesAnterior =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior ),
+              dCidade[REGIAO BRASIL] = _vRegional
+          )
+      VAR QtdeHoras =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnterior )
+      
+      RETURN
+      DIVIDE ( TotalAtendimentos, QtdeHoras )
+      
+    - UF e Produtividade Norte:
+      
+      VAR TabelaUFsNordeste =
+          CALCULATETABLE(
+              VALUES(dCidade[UF]),
+              dCidade[REGIAO BRASIL] = "Norte"
+          )
+      
+      VAR TabelaProdutividade =
+          ADDCOLUMNS(
+              TabelaUFsNordeste,
+              "ProdutividadeUF",
+                  CALCULATE(
+                      [Produtividade Mes Atual]
+                  )
+          )
+      
+      VAR ProdMax = MAXX(TabelaProdutividade, [ProdutividadeUF])
+      VAR ProdMin = MINX(TabelaProdutividade, [ProdutividadeUF])
+      
+      VAR UFMax = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMax),
+              dCidade[UF],
+              ", "
+          )
+      VAR UFMin = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMin),
+              dCidade[UF],
+              ", "
+          )
+      VAR Amplitude = ProdMax - ProdMin
+      RETURN
+          "Maior ICH ( ⬆ ) : " & UFMax & " - " & FORMAT(ProdMax, "#,##0.00") & UNICHAR(10)
+          & "Menor ICH ( ⬇ ) : " & UFMin & " - " & FORMAT(ProdMin, "#,##0.00") & UNICHAR(10)
+          & "Variação: " & FORMAT(Amplitude, "#,##0.00")
+      
+      
+    - UF e Produtividade Sul:
+      
+      VAR TabelaUFsNordeste =
+          CALCULATETABLE(
+              VALUES(dCidade[UF]),
+              dCidade[REGIAO BRASIL] = "Sul"
+          )
+      
+      VAR TabelaProdutividade =
+          ADDCOLUMNS(
+              TabelaUFsNordeste,
+              "ProdutividadeUF",
+                  CALCULATE(
+                      [Produtividade Mes Atual]
+                  )
+          )
+      
+      VAR ProdMax = MAXX(TabelaProdutividade, [ProdutividadeUF])
+      VAR ProdMin = MINX(TabelaProdutividade, [ProdutividadeUF])
+      
+      VAR UFMax = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMax),
+              dCidade[UF],
+              ", "
+          )
+      VAR UFMin = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMin),
+              dCidade[UF],
+              ", "
+          )
+      VAR Amplitude = ProdMax - ProdMin
+      RETURN
+          "Maior ICH ( ⬆ ) : " & UFMax & " - " & FORMAT(ProdMax, "#,##0.00") & UNICHAR(10)
+          & "Menor ICH ( ⬇ ) : " & UFMin & " - " & FORMAT(ProdMin, "#,##0.00") & UNICHAR(10)
+          & "Variação: " & FORMAT(Amplitude, "#,##0.00")
+      
+    - UF e Produtividade Nordeste:
+      
+      VAR TabelaUFsNordeste =
+          CALCULATETABLE(
+              VALUES(dCidade[UF]),
+              dCidade[REGIAO BRASIL] = "Nordeste"
+          )
+      
+      VAR TabelaProdutividade =
+          ADDCOLUMNS(
+              TabelaUFsNordeste,
+              "ProdutividadeUF",
+                  CALCULATE(
+                      [Produtividade Mes Atual]
+                  )
+          )
+      
+      VAR ProdMax = MAXX(TabelaProdutividade, [ProdutividadeUF])
+      VAR ProdMin = MINX(TabelaProdutividade, [ProdutividadeUF])
+      
+      VAR UFMax = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMax),
+              dCidade[UF],
+              ", "
+          )
+      VAR UFMin = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMin),
+              dCidade[UF],
+              ", "
+          )
+      VAR Amplitude = ProdMax - ProdMin
+      RETURN
+          "Maior ICH ( ⬆ ) : " & UFMax & " - " & FORMAT(ProdMax, "#,##0.00") & UNICHAR(10)
+          & "Menor ICH ( ⬇ ) : " & UFMin & " - " & FORMAT(ProdMin, "#,##0.00") & UNICHAR(10)
+          & "Variação: " & FORMAT(Amplitude, "#,##0.00")
+      
+      
+    - UF e Produtividade Centro-Oeste:
+      
+      VAR TabelaUFsNordeste =
+          CALCULATETABLE(
+              VALUES(dCidade[UF]),
+              dCidade[REGIAO BRASIL] = "Centro-Oeste"
+          )
+      
+      VAR TabelaProdutividade =
+          ADDCOLUMNS(
+              TabelaUFsNordeste,
+              "ProdutividadeUF",
+                  CALCULATE(
+                      [Produtividade Mes Atual]
+                  )
+          )
+      
+      VAR ProdMax = MAXX(TabelaProdutividade, [ProdutividadeUF])
+      VAR ProdMin = MINX(TabelaProdutividade, [ProdutividadeUF])
+      
+      VAR UFMax = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMax),
+              dCidade[UF],
+              ", "
+          )
+      VAR UFMin = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMin),
+              dCidade[UF],
+              ", "
+          )
+      VAR Amplitude = ProdMax - ProdMin
+      RETURN
+          "Maior ICH ( ⬆ ) : " & UFMax & " - " & FORMAT(ProdMax, "#,##0.00") & UNICHAR(10)
+          & "Menor ICH ( ⬇ ) : " & UFMin & " - " & FORMAT(ProdMin, "#,##0.00") & UNICHAR(10)
+          & "Variação: " & FORMAT(Amplitude, "#,##0.00")
+      
+      
+    - UF e Produtividade Sudeste:
+      
+      VAR TabelaUFsNordeste =
+          CALCULATETABLE(
+              VALUES(dCidade[UF]),
+              dCidade[REGIAO BRASIL] = "Sudeste"
+          )
+      
+      VAR TabelaProdutividade =
+          ADDCOLUMNS(
+              TabelaUFsNordeste,
+              "ProdutividadeUF",
+                  CALCULATE(
+                      [Produtividade Mes Atual]
+                  )
+          )
+      
+      VAR ProdMax = MAXX(TabelaProdutividade, [ProdutividadeUF])
+      VAR ProdMin = MINX(TabelaProdutividade, [ProdutividadeUF])
+      
+      VAR UFMax = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMax),
+              dCidade[UF],
+              ", "
+          )
+      VAR UFMin = 
+          CONCATENATEX(
+              FILTER(TabelaProdutividade, [ProdutividadeUF] = ProdMin),
+              dCidade[UF],
+              ", "
+          )
+      VAR Amplitude = ProdMax - ProdMin
+      RETURN
+          "Maior ICH ( ⬆ ) : " & UFMax & " - " & FORMAT(ProdMax, "#,##0.00") & UNICHAR(10)
+          & "Menor ICH ( ⬇ ) : " & UFMin & " - " & FORMAT(ProdMin, "#,##0.00") & UNICHAR(10)
+          & "Variação: " & FORMAT(Amplitude, "#,##0.00")
+      
+      
+    - Format Max e Min Geral:
+      
+      VAR _Medida = [Produtividade Mes Atual]
+      VAR _ValorMaximo = 
+          MAXX(
+              ALLSELECTED(dCalendario[Mes_Ano], dCalendario[Classif_MesAno]),
+              [Produtividade Mes Atual]
+          )
+      VAR _ValorMinimo = 
+          MINX(
+              ALLSELECTED(dCalendario[Mes_Ano], dCalendario[Classif_MesAno]),
+              [Produtividade Mes Atual]
+          )
+      RETURN
+      SWITCH(
+          TRUE(),
+          _Medida = _ValorMaximo, "#81C784",
+          _Medida = _ValorMinimo, "#E57373",
+          "#1A63FA"
+      )
+    - Meta:
+      
+      IF (
+          ISBLANK ( [Total Atendimentos] ), 
+          BLANK(), 
+          CALCULATE (
+              MAX ( dMetaEmpresa[META] ),
+              TREATAS ( VALUES ( dCidade[CD_EMP_UNIF] ), dMetaEmpresa[CD_EMP_UNIF] )
+          )
+      )
+      
+    - % Retorno:
+      DIVIDE( [Qtde Retorno] , [Total Atendimentos] )
+    - % Horas Represent.:
+      
+      VAR Horas = SUM(fProdutividade[Qtd. Horas])
+      VAR TotalContexto =
+          SWITCH(
+              TRUE(),
+              
+              // Nível PRESTADOR - % dentro da especialidade
+              ISINSCOPE(dPrestador[NM_PRESTADOR]),
+                  CALCULATE(
+                      SUM(fProdutividade[Qtd. Horas]),
+                      ALLSELECTED(dPrestador[NM_PRESTADOR])
+                  ),
+              
+              // Nível ESPECIALIDADE - % dentro da unidade
+              ISINSCOPE(dEspecialidade[DS_ESPECIALIDADE]),
+                  CALCULATE(
+                      SUM(fProdutividade[Qtd. Horas]),
+                      ALLSELECTED(dEspecialidade[DS_ESPECIALIDADE])
+                  ),
+              
+              // Nível UNIDADE - % dentro da cidade (quando expandido da cidade)
+              ISINSCOPE(dCidade[NM_FANTASIA]) && ISINSCOPE(dCidade[NM_CIDADE]),
+                  CALCULATE(
+                      SUM(fProdutividade[Qtd. Horas]),
+                      ALLSELECTED(dCidade[NM_FANTASIA])
+                  ),
+              
+              // Nível UNIDADE - % do total geral (quando pulado direto para unidade)
+              ISINSCOPE(dCidade[NM_FANTASIA]) && NOT(ISINSCOPE(dCidade[NM_CIDADE])),
+                  CALCULATE(
+                      SUM(fProdutividade[Qtd. Horas]),
+                      ALLSELECTED(dCidade)
+                  ),
+              
+              // Nível CIDADE - % do total geral
+              ISINSCOPE(dCidade[NM_CIDADE]),
+                  CALCULATE(
+                      SUM(fProdutividade[Qtd. Horas]),
+                      ALLSELECTED(dCidade)
+                  ),
+              
+              // Total geral
+              CALCULATE(
+                  SUM(fProdutividade[Qtd. Horas]),
+                  ALLSELECTED(dCidade),
+                  ALLSELECTED(dEspecialidade),
+                  ALLSELECTED(dPrestador)
+              )
+          )
+      RETURN
+      DIVIDE(Horas, TotalContexto)
+    - Produtividade por Ano:
+      
+      VAR _vAno = 2025
+      VAR TotalAtendimentos = 
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              FILTER(
+                  RELATEDTABLE(dCalendario),
+                  dCalendario[Ano] = _vAno
+              )
+          )
+      VAR QtdeHoras = 
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  RELATEDTABLE(dCalendario),
+                 dCalendario[Ano] = _vAno
+              )
+          )
+      RETURN
+          ROUND(DIVIDE(TotalAtendimentos, QtdeHoras),2)
+    - Performarce Geral:
+      DIVIDE( [Produtividade] , [Meta] ) 
+    - Format Cond Prod Geral:
+      
+      IF ( [Produtividade] >= [Meta] , "GREEN", "RED" )
+    - CategoriaExibicao:
+      1
+    - Qt Med-Esp-Local por Hora:
+      
+      VAR _vTabela = 
+      SUMMARIZE(
+          FILTER(
+              ADDCOLUMNS(
+                  fProdutividade,
+                  "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+              ),
+              fProdutividade[TP_PGTO] = 1
+          ),
+          fProdutividade[CD_PRESTADOR],
+          fProdutividade[CD_ESPECIALIDADE],
+          fProdutividade[CD_LOCAL],
+          [AnoMes]
+      )
+      RETURN
+      COUNTROWS(_vTabela)
+      
+      
+      
+    - Qt Med-Esp-Local por Outros:
+      
+      VAR _vTabela = 
+      SUMMARIZE(
+          FILTER(
+              ADDCOLUMNS(
+                  fProdutividade,
+                  "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+              ),
+              fProdutividade[TP_PGTO] <> 1
+          ),
+          fProdutividade[CD_PRESTADOR],
+          fProdutividade[CD_ESPECIALIDADE],
+          fProdutividade[CD_LOCAL],
+          [AnoMes]
+      )
+      RETURN
+      COUNTROWS(_vTabela)
+    - % Med-Esp_Local por Hora:
+      
+      DIVIDE( [Qt Med-Esp-Local por Hora] , [Qt Med-Esp-Local por Hora] + [Qt Med-Esp-Local por Outros])
+    - Quartil Produtividade:
+      
+      VAR RankAtual = [Rank Produtividade]
+      VAR TotalUnid = [Rank Total Unidades]
+      VAR Q1 = ROUNDUP(TotalUnid * 0.25, 0)
+      VAR Q2 = ROUNDUP(TotalUnid * 0.5, 0)
+      VAR Q3 = ROUNDUP(TotalUnid * 0.75, 0)
+      RETURN
+          SWITCH(
+              TRUE(),
+              RankAtual <= Q1, "1º Q",
+              RankAtual <= Q2, "2º Q",
+              RankAtual <= Q3, "3º Q",
+              "4º Q"
+          )
+      
+    - 6. Jun/25:
+      
+      VAR _MesAno = "Jun/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 6. Format Mes Jun:
+      
+      IF ( [6. Jun/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 7. Jul/25:
+      
+      VAR _MesAno = "Jul/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 7. Format Mes Jul:
+      
+      IF ( [7. Jul/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - Meta Geral:
+      4.96
+    - Format Cond Prod Geral 2:
+      
+      IF ( [Produtividade] >= [Meta Geral] , "GREEN", "RED" )
+    - Rank Produtividade:
+      
+      RANKX(
+          VALUES(dCidade[NM_FANTASIA]),  -- Ranking só das clínicas no contexto atual (ex: cidade e mês)
+          [Produtividade],
+          ,
+          DESC,
+          DENSE
+      )
+      
+      
+    - Rank Total Unidades:
+      
+      CALCULATE(
+          DISTINCTCOUNT(dCidade[NM_FANTASIA]),
+          dCidade[NM_CIDADE] = SELECTEDVALUE(dCidade[NM_CIDADE])
+      )
+      
+    - Format Cond Prod Geral Cor Clara:
+      
+       IF ( [Produtividade] >= [Meta] , "#C7F9CC", "#fed0bb" )
+    - % Med-Esp_Local por Outros:
+      
+      DIVIDE( [Qt Med-Esp-Local por Outros] , [Qt Med-Esp-Local por Hora] + [Qt Med-Esp-Local por Outros])
+    - % Med-Esp_Local por Hora - NDI SP:
+      
+      VAR Qt_Med_Esp_Local_Hora_NDISP =
+      CALCULATE(
+          COUNTROWS(
+              SUMMARIZE(
+                  FILTER(
+                      ADDCOLUMNS(
+                          fProdutividade,
+                          "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+                      ),
+                      fProdutividade[TP_PGTO] = 1
+                  ),
+                  fProdutividade[CD_PRESTADOR],
+                  fProdutividade[CD_ESPECIALIDADE],
+                  fProdutividade[CD_LOCAL],
+                  [AnoMes]
+              )
+          ),
+          FILTER(
+              ALL(dCidade),
+              dCidade[empresa] IN { "NDI SP" , "NDI RJ" }
+          )
+      )
+      
+      VAR Qt_Med_Esp_Local_Outros_NDISP =
+      CALCULATE(
+          COUNTROWS(
+              SUMMARIZE(
+                  FILTER(
+                      ADDCOLUMNS(
+                          fProdutividade,
+                          "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+                      ),
+                      fProdutividade[TP_PGTO] <> 1
+                  ),
+                  fProdutividade[CD_PRESTADOR],
+                  fProdutividade[CD_ESPECIALIDADE],
+                  fProdutividade[CD_LOCAL],
+                  [AnoMes]
+              )
+          ),
+          FILTER(
+              ALL(dCidade),
+              dCidade[empresa] IN { "NDI SP" , "NDI RJ" }
+          )
+      )
+      
+      RETURN
+      DIVIDE(
+          Qt_Med_Esp_Local_Hora_NDISP,
+          Qt_Med_Esp_Local_Hora_NDISP + Qt_Med_Esp_Local_Outros_NDISP,
+          0
+      )
+    - % Med-Esp_Local por Hora - HAP:
+      
+      VAR Qt_Med_Esp_Local_Hora_NDISP =
+      CALCULATE(
+          COUNTROWS(
+              SUMMARIZE(
+                  FILTER(
+                      ADDCOLUMNS(
+                          fProdutividade,
+                          "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+                      ),
+                      fProdutividade[TP_PGTO] = 1
+                  ),
+                  fProdutividade[CD_PRESTADOR],
+                  fProdutividade[CD_ESPECIALIDADE],
+                  fProdutividade[CD_LOCAL],
+                  [AnoMes]
+              )
+          ),
+          FILTER(
+              ALL(dCidade),
+              NOT (dCidade[empresa] IN { "NDI SP", "NDI RJ" })
+          )
+      )
+      
+      VAR Qt_Med_Esp_Local_Outros_NDISP =
+      CALCULATE(
+          COUNTROWS(
+              SUMMARIZE(
+                  FILTER(
+                      ADDCOLUMNS(
+                          fProdutividade,
+                          "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+                      ),
+                      fProdutividade[TP_PGTO] <> 1
+                  ),
+                  fProdutividade[CD_PRESTADOR],
+                  fProdutividade[CD_ESPECIALIDADE],
+                  fProdutividade[CD_LOCAL],
+                  [AnoMes]
+              )
+          ),
+          FILTER(
+              ALL(dCidade),
+             NOT (dCidade[empresa] IN { "NDI SP", "NDI RJ" })
+          )
+      )
+      
+      RETURN
+      DIVIDE(
+          Qt_Med_Esp_Local_Hora_NDISP,
+          Qt_Med_Esp_Local_Hora_NDISP + Qt_Med_Esp_Local_Outros_NDISP,
+          0
+      )
+    - M vs M-12:
+      
+      VAR MesAnoAtual =
+          FORMAT ( TODAY(), "mmm/yy" )
+      VAR MesAnoAnterior =
+          FORMAT ( EOMONTH ( TODAY(), -1 ), "mmm/yy" )
+      
+      -- Mês atual (com fallback para mês anterior)
+      VAR AtendMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual )
+          )
+      VAR AtendMesAnteriorFallback =
+          CALCULATE (
+              SUM ( fProdutividade[Atendimento Geral] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior )
+          )
+      VAR TotalAtendMesAtual =
+          IF ( NOT ISBLANK ( AtendMesAtual ) && AtendMesAtual > 0, AtendMesAtual, AtendMesAnteriorFallback )
+      
+      VAR HorasMesAtual =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAtual )
+          )
+      VAR HorasMesAnteriorFallback =
+          CALCULATE (
+              SUM ( fProdutividade[Qtd. Horas] ),
+              FILTER ( dCalendario, dCalendario[Mes_Ano] = MesAnoAnterior )
+          )
+      VAR QtdeHorasMesAtual =
+          IF ( NOT ISBLANK ( HorasMesAtual ) && HorasMesAtual > 0, HorasMesAtual, HorasMesAnteriorFallback )
+      
+      VAR ProdMesAtual =
+          DIVIDE ( TotalAtendMesAtual, QtdeHorasMesAtual )
+      
+      -- Mês mesmo período ano anterior
+      VAR MesM12 =
+          CALCULATE (
+              DIVIDE(
+                  SUM(fProdutividade[Atendimento Geral]),
+                  SUM(fProdutividade[Qtd. Horas])
+              ),
+              FILTER(
+                  ALL(dCalendario),
+                  MONTH(dCalendario[Date]) = MONTH(TODAY()) &&
+                  YEAR(dCalendario[Date]) = YEAR(TODAY()) - 1
+              )
+          )
+      
+      RETURN
+      IF(
+          ISBLANK(MesM12) || MesM12 = 0,
+          " - ",
+          ProdMesAtual / MesM12 - 1
+      )
+      
+    - Atual vs Anterior:
+      
+      -- Identifica o mês atual real com dados
+      VAR MesAtualReal =
+          MAXX(
+              FILTER(
+                  dCalendario,
+                  CALCULATE(SUM(fProdutividade[Atendimento Geral])) > 0
+              ),
+              dCalendario[Date]
+          )
+      
+      -- Mês e ano do mês atual real
+      VAR AnoMesAtualReal = YEAR(MesAtualReal)
+      VAR MesNumAtualReal = MONTH(MesAtualReal)
+      
+      -- Mês anterior real
+      VAR MesNumAnteriorReal = IF(MesNumAtualReal = 1, 12, MesNumAtualReal - 1)
+      VAR AnoAnteriorReal = IF(MesNumAtualReal = 1, AnoMesAtualReal - 1, AnoMesAtualReal)
+      
+      -- Produtividade mês atual real
+      VAR AtendMesAtualReal =
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              FILTER(
+                  dCalendario,
+                  dCalendario[Ano] = AnoMesAtualReal &&
+                  dCalendario[Mes] = MesNumAtualReal
+              )
+          )
+      VAR HorasMesAtualReal =
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  dCalendario,
+                  dCalendario[Ano] = AnoMesAtualReal &&
+                  dCalendario[Mes] = MesNumAtualReal
+              )
+          )
+      VAR ProdMesAtualReal = DIVIDE(AtendMesAtualReal, HorasMesAtualReal)
+      
+      -- Produtividade mês anterior ao mês atual real
+      VAR AtendMesAnteriorReal =
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              FILTER(
+                  dCalendario,
+                  dCalendario[Ano] = AnoAnteriorReal &&
+                  dCalendario[Mes] = MesNumAnteriorReal
+              )
+          )
+      VAR HorasMesAnteriorReal =
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              FILTER(
+                  dCalendario,
+                  dCalendario[Ano] = AnoAnteriorReal &&
+                  dCalendario[Mes] = MesNumAnteriorReal
+              )
+          )
+      VAR ProdMesAnteriorReal = DIVIDE(AtendMesAnteriorReal, HorasMesAnteriorReal)
+      
+      RETURN
+      IF(
+          ISBLANK(ProdMesAnteriorReal) || ProdMesAnteriorReal = 0,
+          BLANK(),
+          ProdMesAtualReal / ProdMesAnteriorReal - 1
+      )
+      
+    - Real Efetivadas:
+      SUM( fProdutividade[QTE_EFETIVADAS] )
+    - Real Efetivadas AnoAtualEAnterior:
+      
+      CALCULATE(
+          SUM(fProdutividade[QTE_EFETIVADAS]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] IN {YEAR(TODAY()) - 1, YEAR(TODAY())}
+          )
+      )
+      
+    - % Consul. Efetivadas:
+      
+      VAR _Cancelamentos =
+      CALCULATE(
+          SUM(fProdutividade[QTE_CANCELADAS]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] IN {YEAR(TODAY()) - 1, YEAR(TODAY())}
+          )
+      )
+      VAR _RemPaciente = 
+      CALCULATE(
+          SUM(fProdutividade[QT_REM_PAC]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] IN {YEAR(TODAY()) - 1, YEAR(TODAY())}
+          )
+      )
+      VAR _Efetivadas = 
+      CALCULATE(
+          SUM(fProdutividade[QTE_EFETIVADAS]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] IN {YEAR(TODAY()) - 1, YEAR(TODAY())}
+          )
+      )
+      VAR _TotalConsultas = _Cancelamentos - _RemPaciente + [Real Efetivadas]
+      RETURN
+      DIVIDE( _Efetivadas, _TotalConsultas )
+    - Produtividade Ano Atual e Anterior:
+      
+      CALCULATE(
+          DIVIDE([Total Atendimentos], [Qtde Horas]),
+          FILTER(
+              dCalendario,
+              dCalendario[Ano] IN {YEAR(TODAY()), YEAR(TODAY()) - 1}
+          )
+      )
+      
+    - Parametro:
+      AVERAGE(fProdutividade[QTE_LIMITE])
+    - % Falta Paciente:
+      
+      VAR _Cancelamento = SUM( fProdutividade[QTE_CANCELADAS] )
+      VAR _RemPaciente = SUM( fProdutividade[QT_REM_PAC] )
+      VAR _Efetivadas = SUM ( fProdutividade[QTE_EFETIVADAS] )
+      VAR _FaltaPaciente = SUM( fProdutividade[QT_FALTA_PAC] )
+      VAR _Consultas = _Cancelamento - _RemPaciente + _Efetivadas
+      RETURN
+      DIVIDE( _FaltaPaciente, _Consultas)
+    - Meta Falta Paciente:
+      0.25
+    - Format Meta Regional 1:
+      
+      VAR _Meta = [Meta Reg1]
+      VAR _Prod = [Produtividade Regional I Mês Atual]
+      RETURN
+      IF (   _Prod < _Meta, "#E57373", "#81C784" //"#1A63FA"
+      )
+    - Format Meta Regional 2:
+      
+      VAR _Meta = [Meta Reg2]
+      VAR _Prod = [Produtividade Regional II Mês Atual]
+      RETURN
+      IF (   _Prod < _Meta, "#E57373", "#81C784" //"#1A63FA"
+      )
+    - Total Usuarios:
+      SUM( fProdutividade[QT_USUARIOS] )
+    - Total Usuarios >30Min:
+      SUM( fProdutividade[QT_USUARIOS_30MIN] )
+    - % Espera:
+      DIVIDE( [Total Usuarios >30Min] , [Total Usuarios] )
+    - Produtividade Básica Hap:
+      
+      DIVIDE(
+          CALCULATE(
+              [Total Atendimentos],
+              dEspecialidade[BASICA_HAP] = 1
+          ),
+          CALCULATE(
+              [Qtde Horas],
+              dEspecialidade[BASICA_HAP] = 1
+          )
+      )
+      
+    - Qt Atingiu Meta:
+      
+      VAR TabelaMensal =
+          ADDCOLUMNS (
+              SUMMARIZE (
+                  fProdutividade,
+                  dMetaEmpresa[CD_EMP_UNIF],
+                  dCidade[COD_UNIDADE],
+                  dEspecialidade[CD_ESPECIALIDADE],
+                  dPrestador[CD_PRESTADOR],
+                  dCalendario[Mes_Ano]
+              ),
+              "@Meta", CALCULATE ( MAX ( dMetaEmpresa[META] ) ),
+              "@Produtividade",
+                  DIVIDE (
+                      CALCULATE ( [Total Atendimentos] ),
+                      CALCULATE ( [Qtde Horas] )
+                  )
+          )
+      RETURN
+      SUMX (
+          TabelaMensal,
+          VAR _meta = [@Meta]
+          VAR _prod = [@Produtividade]
+          RETURN IF ( _prod >= _meta && NOT ISBLANK ( _meta ), 1, 0 )
+      )
+      
+      
+      
+    - Qt Nao Atingiu Meta:
+      
+      COUNTROWS(
+          FILTER(
+              ADDCOLUMNS(
+                  SUMMARIZE(
+                      fProdutividade,
+                      dMetaEmpresa[CD_EMP_UNIF],
+                      dCidade[COD_UNIDADE],
+                      dEspecialidade[CD_ESPECIALIDADE],
+                      dPrestador[CD_PRESTADOR],
+                      dCalendario[Mes_Ano]
+                  ),
+                  "@Meta", CALCULATE(MAX(dMetaEmpresa[META])),
+                  "@Produtividade", DIVIDE([Total Atendimentos], [Qtde Horas])
+              ),
+              [@Produtividade] < [@Meta] && NOT ISBLANK([@Meta])
+          )
+      )
+    - Total Medico-Espec-Unidade:
+      [Qt Atingiu Meta] + [Qt Nao Atingiu Meta]
+    - % Atingiu Meta:
+      DIVIDE( [Qt Atingiu Meta] , [Qt Atingiu Meta] + [Qt Nao Atingiu Meta] )
+    - % Não Atingiu Meta:
+      DIVIDE( [Qt Nao Atingiu Meta]	, [Qt Atingiu Meta] + [Qt Nao Atingiu Meta] )
+    - % Atingiu Meta Reg1:
+      
+      VAR TabelaMensal =
+          FILTER (
+              ADDCOLUMNS (
+                  SUMMARIZE (
+                      fProdutividade,
+                      dMetaEmpresa[CD_EMP_UNIF],
+                      dCidade[COD_UNIDADE],
+                      dEspecialidade[CD_ESPECIALIDADE],
+                      dPrestador[CD_PRESTADOR],
+                      dCalendario[Mes_Ano],
+                      dCidade[REGIONAL]
+                  ),
+                  "@Meta", CALCULATE ( MAX ( dMetaEmpresa[META] ) ),
+                  "@Produtividade",
+                      DIVIDE (
+                          CALCULATE ( [Total Atendimentos] ),
+                          CALCULATE ( [Qtde Horas] )
+                      )
+              ),
+              dCidade[REGIONAL] = "REGIONAL I"
+          )
+      VAR Numerador =
+          SUMX (
+              TabelaMensal,
+              VAR _meta = [@Meta]
+              VAR _prod = [@Produtividade]
+              RETURN IF ( _prod >= _meta && NOT ISBLANK ( _meta ), 1, 0 )
+          )
+      VAR Denominador =
+          COUNTROWS ( TabelaMensal )
+      RETURN
+          DIVIDE ( Numerador, Denominador )
+      
+    - % Atingiu Meta Reg2:
+      
+      VAR TabelaMensal =
+          FILTER (
+              ADDCOLUMNS (
+                  SUMMARIZE (
+                      fProdutividade,
+                      dMetaEmpresa[CD_EMP_UNIF],
+                      dCidade[COD_UNIDADE],
+                      dEspecialidade[CD_ESPECIALIDADE],
+                      dPrestador[CD_PRESTADOR],
+                      dCalendario[Mes_Ano],
+                      dCidade[REGIONAL]
+                  ),
+                  "@Meta", CALCULATE ( MAX ( dMetaEmpresa[META] ) ),
+                  "@Produtividade",
+                      DIVIDE (
+                          CALCULATE ( [Total Atendimentos] ),
+                          CALCULATE ( [Qtde Horas] )
+                      )
+              ),
+              dCidade[REGIONAL] = "REGIONAL II"
+          )
+      VAR Numerador =
+          SUMX (
+              TabelaMensal,
+              VAR _meta = [@Meta]
+              VAR _prod = [@Produtividade]
+              RETURN IF ( _prod >= _meta && NOT ISBLANK ( _meta ), 1, 0 )
+          )
+      VAR Denominador =
+          COUNTROWS ( TabelaMensal )
+      RETURN
+          DIVIDE ( Numerador, Denominador )
+      
+    - % Atingiu Meta Reg1 Ultimos 6 meses:
+      
+      VAR TabelaMensal =
+      FILTER (
+          ADDCOLUMNS (
+              SUMMARIZE (
+                  fProdutividade,
+                  dMetaEmpresa[CD_EMP_UNIF],
+                  dCidade[COD_UNIDADE],
+                  dEspecialidade[CD_ESPECIALIDADE],
+                  dPrestador[CD_PRESTADOR],
+                  dCalendario[Classif_MesAno],
+                  dCalendario[Ultimos6Meses],
+                  dCidade[REGIONAL]
+              ),
+              "@Meta", CALCULATE ( MAX ( dMetaEmpresa[META] ) ),
+              "@Produtividade",
+                  DIVIDE (
+                      CALCULATE ( [Total Atendimentos] ),
+                      CALCULATE ( [Qtde Horas] )
+                  )
+          ),
+          dCidade[REGIONAL] = "REGIONAL I" && dCalendario[Ultimos6Meses] = 1 
+      )
+      VAR Numerador =
+          SUMX (
+              TabelaMensal,
+              VAR _meta = [@Meta]
+              VAR _prod = [@Produtividade]
+              RETURN IF ( _prod >= _meta && NOT ISBLANK ( _meta ), 1, 0 )
+          )
+      VAR Denominador =
+          COUNTROWS ( TabelaMensal )
+      RETURN
+          DIVIDE ( Numerador, Denominador )
+    - ##Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+      
+      
+    - % Atingiu Meta Reg2 Ultimos 6 meses:
+      
+      VAR TabelaMensal =
+      FILTER (
+          ADDCOLUMNS (
+              SUMMARIZE (
+                  fProdutividade,
+                  dMetaEmpresa[CD_EMP_UNIF],
+                  dCidade[COD_UNIDADE],
+                  dEspecialidade[CD_ESPECIALIDADE],
+                  dPrestador[CD_PRESTADOR],
+                  dCalendario[Classif_MesAno],
+                  dCalendario[Ultimos6Meses],
+                  dCidade[REGIONAL]
+              ),
+              "@Meta", CALCULATE ( MAX ( dMetaEmpresa[META] ) ),
+              "@Produtividade",
+                  DIVIDE (
+                      CALCULATE ( [Total Atendimentos] ),
+                      CALCULATE ( [Qtde Horas] )
+                  )
+          ),
+          dCidade[REGIONAL] = "REGIONAL II" && dCalendario[Ultimos6Meses] = 1 
+      )
+      VAR Numerador =
+          SUMX (
+              TabelaMensal,
+              VAR _meta = [@Meta]
+              VAR _prod = [@Produtividade]
+              RETURN IF ( _prod >= _meta && NOT ISBLANK ( _meta ), 1, 0 )
+          )
+      VAR Denominador =
+          COUNTROWS ( TabelaMensal )
+      RETURN
+          DIVIDE ( Numerador, Denominador )
+    - Ranking Especialidade:
+      
+      VAR _VRank =
+          RANKX(
+              ALL ( dEspecialidade[DS_ESPECIALIDADE] ),
+              [Produtividade]
+          )
+      RETURN
+      IF(
+          ISINSCOPE(dEspecialidade[DS_ESPECIALIDADE]) && _VRank <= [Valor TOP N],
+          FORMAT(_VRank, "0") & "°",
+          BLANK()
+      )
+      
+    - Top N Produtividade Especialidade:
+      
+      CALCULATE(
+          [Produtividade],
+          KEEPFILTERS(
+              TOPN(
+                  [Valor TOP N],                               
+                  FILTER(
+                      ALL( dEspecialidade[DS_ESPECIALIDADE] ),                  
+                      NOT ISBLANK( [Produtividade] )              
+                  ),
+                  [Produtividade]                                   
+              )
+          )
+      )
+    - Ranking Unidade:
+      
+      VAR _VRank =
+          RANKX(
+              ALL ( dCidade[NM_FANTASIA] ),
+              [Produtividade]
+          )
+      RETURN
+      IF(
+          ISINSCOPE( dCidade[NM_FANTASIA] ) && _VRank <= [Valor TOP N],
+          FORMAT(_VRank, "0") & "°",
+          BLANK()
+      )
+    - Top N Produtividade Unidade:
+      
+      CALCULATE(
+          [Produtividade],
+          KEEPFILTERS(
+              TOPN(
+                  [Valor TOP N],                               
+                  FILTER(
+                      ALL( dCidade[NM_FANTASIA] ),                  
+                      NOT ISBLANK( [Produtividade] )              
+                  ),
+                  [Produtividade]                                   
+              )
+          )
+      )
+      
+    - Ranking Medico:
+      
+      VAR _VRank =
+          RANKX(
+              ALL ( dPrestador[NM_PRESTADOR] ),
+              [Produtividade]
+          )
+      RETURN
+      IF(
+          ISINSCOPE( dPrestador[NM_PRESTADOR] ) && _VRank <= [Valor TOP N],
+          FORMAT(_VRank, "0") & "°",
+          BLANK()
+      )
+    - Top N Produtividade Medico:
+      
+      CALCULATE(
+          [Produtividade],
+          KEEPFILTERS(
+              TOPN(
+                  [Valor TOP N],                               
+                  FILTER(
+                      ALL( dPrestador[NM_PRESTADOR] ),                  
+                      NOT ISBLANK( [Produtividade] )              
+                  ),
+                  [Produtividade]                                   
+              )
+          )
+      )
+    - Top N Produtividade Unidade (Últimos):
+      
+      CALCULATE(
+          [Produtividade],
+          KEEPFILTERS(
+              TOPN(
+                  [Valor TOP N],
+                  FILTER(
+                      ALL( dCidade[NM_FANTASIA] ),
+                      NOT ISBLANK(CALCULATE([Produtividade]))
+                  ),
+                  [Produtividade],
+                  ASC
+              )
+          )
+      )
+      
+      
+    - Ranking Unidade (Últimos):
+      
+      VAR _VRank =
+          RANKX(
+              FILTER(
+                  ALL( dCidade[NM_FANTASIA] ),
+                  NOT ISBLANK( [Produtividade] )        
+              ),
+              [Produtividade],
+              ,
+              ASC                                       
+          )
+      RETURN
+      IF(
+          ISINSCOPE( dCidade[NM_FANTASIA] ) && _VRank <= [Valor TOP N] && NOT ISBLANK( [Produtividade] ),
+          FORMAT(_VRank, "0") & "°",
+          BLANK()
+      )
+      
+    - Top N Produtividade Medico (Últimos):
+      
+      CALCULATE(
+          [Produtividade],
+          KEEPFILTERS(
+              TOPN(
+                  [Valor TOP N],
+                  FILTER(
+                      ALL( dPrestador[NM_PRESTADOR] ),
+                      NOT ISBLANK(CALCULATE([Produtividade]))
+                  ),
+                  [Produtividade],
+                  ASC
+              )
+          )
+      )
+      
+      
+    - Top N Produtividade Especialidade (Últimos):
+      
+      CALCULATE(
+          [Produtividade],
+          KEEPFILTERS(
+              TOPN(
+                  [Valor TOP N],
+                  FILTER(
+                      ALL( dEspecialidade[DS_ESPECIALIDADE] ),
+                      NOT ISBLANK(CALCULATE([Produtividade]))
+                  ),
+                  [Produtividade],
+                  ASC
+              )
+          )
+      )
+      
+      
+    - Ranking Medico (Últimos):
+      
+      VAR _VRank =
+          RANKX(
+              FILTER(
+                  ALL( dPrestador[NM_PRESTADOR] ),
+                  NOT ISBLANK( [Produtividade] )        
+              ),
+              [Produtividade],
+              ,
+              ASC                                       
+          )
+      RETURN
+      IF(
+          ISINSCOPE( dPrestador[NM_PRESTADOR] ) && _VRank <= [Valor TOP N] && NOT ISBLANK( [Produtividade] ),
+          FORMAT(_VRank, "0") & "°",
+          BLANK()
+      )
+      
+    - Ranking Especialidade (Últimos):
+      
+      VAR _VRank =
+          RANKX(
+              FILTER(
+                  ALL( dEspecialidade[DS_ESPECIALIDADE] ),
+                  NOT ISBLANK( [Produtividade] )        
+              ),
+              [Produtividade],
+              ,
+              ASC                                       
+          )
+      RETURN
+      IF(
+          ISINSCOPE( dEspecialidade[DS_ESPECIALIDADE] ) && _VRank <= [Valor TOP N] && NOT ISBLANK( [Produtividade] ),
+          FORMAT(_VRank, "0") & "°",
+          BLANK()
+      )
+      
+    - 8. Ago/25:
+      
+      VAR _MesAno = "Ago/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 8. Format Mes Ago:
+      
+      IF ( [8. Ago/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - Parametro_Mes_Atual:
+      
+      VAR MesAtual = MONTH(TODAY())
+      VAR AnoAtual = YEAR(TODAY())
+      RETURN
+      MAXX(
+          FILTER(
+              fProdutividade,
+              YEAR(fProdutividade[Data]) = AnoAtual &&
+              MONTH(fProdutividade[Data]) = MesAtual
+          ),
+          fProdutividade[QTE_LIMITE]
+      )
+      
+    - Mostrar Linha:
+      
+      IF ( [Produtividade] <= SELECTEDVALUE('Parametro ICH'[ICH]), 1, 0 )
+      
+    - Total de Registros:
+      COUNTROWS( fProdutividade )
+    - Atualizado em:
+      
+      VAR vDataAtualizacao = SELECTEDVALUE(btAtualizar[ATUALIZACAO])
+      VAR vMaxDataBase = CALCULATE(MAX(dCalendario[Date]), ALL(dCalendario))
+      RETURN
+      "Atualizado em: " & vDataAtualizacao & " com dados até " & vMaxDataBase
+      
+    - Consultas PGTO 1:
+      
+      CALCULATE(
+          SUM(fProdutividade[Atendimento Geral]),
+          fProdutividade[TP_PGTO] = 1
+      )
+    - Horas PGTO 1:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Horas]),
+          fProdutividade[TP_PGTO] = 1
+      )
+    - Produtividade Medicos Hora:
+      
+      DIVIDE([Consultas PGTO 1], [Horas PGTO 1])
+    - Horas PGTO 0:
+      
+      CALCULATE(
+          SUM(fProdutividade[Qtd. Horas]),
+          fProdutividade[TP_PGTO] = 0
+      )
+    - Consultas PGTO 0:
+      
+      CALCULATE(
+          SUM(fProdutividade[Atendimento Geral]),
+          fProdutividade[TP_PGTO] = 0
+      )
+    - Produtividade Medicos Não Hora:
+      
+      DIVIDE([Consultas PGTO 0], [Horas PGTO 0])
+    - 9. Set/25:
+      
+      VAR _MesAno = "Set/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 9. Format Mes Set:
+      
+      IF ( [9. Set/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - Mostrar Linha 2:
+      
+      VAR _Limite = [Valor ICH]  -- o SELECTEDVALUE do parâmetro
+      RETURN
+      IF ( [Produtividade] <= _Limite, 1, 0 )
+      
+    - Produtividade Filtrada:
+      
+      VAR ValorICH = SELECTEDVALUE('Parametro ICH'[ICH], 100)  // 100 como padrão se nada selecionado
+      VAR ProdutividadeCalc = DIVIDE([Total Atendimentos], [Qtde Horas])
+      RETURN
+      IF(
+          ProdutividadeCalc <= ValorICH,
+          ProdutividadeCalc,
+          BLANK()
+      )
+    - Total Atend. Filtrado:
+      
+      VAR ValorICH = SELECTEDVALUE('Parametro ICH'[ICH], 100)
+      VAR Produtividade = DIVIDE([Total Atendimentos], [Qtde Horas])
+      RETURN IF(Produtividade <= ValorICH, [Total Atendimentos], BLANK())
+    - Total Horas Filtrado:
+      
+      VAR ValorICH = SELECTEDVALUE('Parametro ICH'[ICH], 100)
+      VAR Produtividade = DIVIDE([Total Atendimentos], [Qtde Horas])
+      RETURN IF(Produtividade <= ValorICH, [Qtde Horas], BLANK())
+    - Produtividade Filtrada (Tabela):
+      
+      CALCULATE (
+          [Produtividade],
+          KEEPFILTERS ( FILTER ( VALUES ( dCidade[NM_FANTASIA]), [Produtividade] <= [Valor ICH] ) )
+      )
+      
+    - ICH Display:
+      
+      SUBSTITUTE(FORMAT([Valor ICH], "0.0"), ",", ".")
+    - Produtividade Dia a Dia Mes Atual:
+      
+      VAR MaxDataComDados = 
+          CALCULATE(
+              MAX(dCalendario[Date]),
+              REMOVEFILTERS(),
+              VALUES(fProdutividade[Data]) 
+          )
+      VAR MesAnoParaUsar = FORMAT(MaxDataComDados, "mmm/yy")
+      RETURN
+      DIVIDE(
+          CALCULATE(
+              SUM(fProdutividade[Atendimento Geral]),
+              dCalendario[Mes_Ano] = MesAnoParaUsar
+          ),
+          CALCULATE(
+              SUM(fProdutividade[Qtd. Horas]),
+              dCalendario[Mes_Ano] = MesAnoParaUsar
+          )
+      )
+    - Medida:
+      
+    - 10. Out/25:
+      
+      VAR _MesAno = "Out/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      
+    - 10. Format Mes Out:
+      
+      IF ( [10. Out/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 11. Nov/25:
+      
+      VAR _MesAno = "Nov/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 11. Format Mes Nov:
+      
+      IF ( [11. Nov/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 12. Dez/25:
+      
+      VAR _MesAno = "Dez/25"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 12. Format Mes Dez:
+      
+      IF ([12. Dez/25] >= [Meta Empresa], "GREEN" , "RED" )
+    - 01. Jan/26:
+      
+      VAR _MesAno = "Jan/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 01. Format Mes Jan26:
+      
+      IF ( [01. Jan/26] >= [Meta Empresa], "GREEN" , "RED" )
+    - 02. Fev/26:
+      
+      VAR _MesAno = "Fev/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 02. Format Mes Fev26:
+      
+      IF ( [02. Fev/26] >= [Meta Empresa], "GREEN" , "RED" )
+    - Total Med_Espe_Local:
+      [Qt Med-Esp-Local por Hora] + [Qt Med-Esp-Local por Outros]
+    - 03. Mar/26:
+      
+      VAR _MesAno = "Mar/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 03. Format Mes Mar26:
+      
+      IF ( [03. Mar/26] >= [Meta Empresa], "GREEN" , "RED" )
+    - 04. Abr/26:
+      
+      VAR _MesAno = "Abr/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 04. Format Mes Abr26:
+      
+      IF ( [04. Abr/26] >= [Meta Empresa], "GREEN" , "RED" )
+    - Qt Med-Esp-Local por Tipo:
+      
+      COUNTROWS(
+          SUMMARIZE(
+              ADDCOLUMNS(
+                  fProdutividade,
+                  "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+              ),
+              fProdutividade[CD_PRESTADOR],
+              fProdutividade[CD_ESPECIALIDADE],
+              fProdutividade[CD_LOCAL],
+              [AnoMes]
+          )
+      )
+    - % Med-Esp-Local por Tipo:
+      
+      VAR _TotalGeral =
+          CALCULATE(
+              COUNTROWS(
+                  SUMMARIZE(
+                      ADDCOLUMNS(
+                          fProdutividade,
+                          "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+                      ),
+                      fProdutividade[CD_PRESTADOR],
+                      fProdutividade[CD_ESPECIALIDADE],
+                      fProdutividade[CD_LOCAL],
+                      [AnoMes]
+                  )
+              ),
+              ALL(dPagamento)
+          )
+      VAR _TotalTipo =
+          COUNTROWS(
+              SUMMARIZE(
+                  ADDCOLUMNS(
+                      fProdutividade,
+                      "AnoMes", FORMAT(fProdutividade[DATA], "YYYY-MM")
+                  ),
+                  fProdutividade[CD_PRESTADOR],
+                  fProdutividade[CD_ESPECIALIDADE],
+                  fProdutividade[CD_LOCAL],
+                  [AnoMes]
+              )
+          )
+      RETURN
+      DIVIDE(_TotalTipo, _TotalGeral)
+    - 05. Mai/26:
+      
+      VAR _MesAno = "Mai/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 05. Format Mes Mai26:
+      
+      IF ( [05. Mai/26] >= [Meta Empresa], "GREEN" , "RED" ) 
+      /*# Mês Anterior ⬆️*/
+      
+      /*# Mês Atual ⬇️*/
+      /*
+      VAR _MesAno = "Mai/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      VAR _Resultado =
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      VAR _Meta = [Meta Empresa] -- substitua pelo nome correto da sua medida/coluna de meta
+      RETURN
+          IF(_Resultado >= _Meta, "#C4DEC1", "#EFB5B9") */
+    - 06. Jun/26:
+      
+      VAR _MesAno = "Jun/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 06. Format Mes Jun26:
+      
+      IF ( [06. jun/26] >= [Meta Empresa], "GREEN" , "RED" ) 
+      /*# Mês Anterior ⬆️*/
+      
+      /*# Mês Atual ⬇️*/
+      
+      /* VAR _MesAno = "Jun/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      VAR _Resultado =
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      VAR _Meta = [Meta Empresa] -- substitua pelo nome correto da sua medida/coluna de meta
+      RETURN
+          IF(_Resultado >= _Meta, "#C4DEC1", "#EFB5B9") */
+    - 07. Jul/26:
+      
+      VAR _MesAno = "Jul/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 07. Format Mes Jul26:
+      
+       IF ( [07. Jul/26] >= [Meta Empresa], "GREEN" , "RED" ) 
+      /*# Mês Anterior ⬆️*/
+      
+      /*# Mês Atual ⬇️*/
+      /* 
+      VAR _MesAno = "Jul/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      VAR _Resultado =
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      VAR _Meta = [Meta Empresa] -- substitua pelo nome correto da sua medida/coluna de meta
+      RETURN
+          IF(_Resultado >= _Meta, "#C4DEC1", "#EFB5B9") */
+    - 08. Format Mes Ago26:
+      
+       IF ( [08. Ago/26] >= [Meta Empresa], "GREEN" , "RED" ) 
+      /*# Mês Anterior ⬆️*/
+      
+      /*# Mês Atual ⬇️
+      
+      VAR _MesAno = "Ago/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      VAR _Resultado =
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      VAR _Meta = [Meta Empresa] -- substitua pelo nome correto da sua medida/coluna de meta
+      RETURN
+          IF(_Resultado >= _Meta, "#C4DEC1", "#EFB5B9") */
+    - 08. Ago/26:
+      
+      VAR _MesAno = "Ago/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+    - 09. Format Mes Set26:
+      
+      -- IF ( [09. Set/26] >= [Meta Empresa], "GREEN" , "RED" ) 
+      /*# Mês Anterior ⬆️*/
+      
+      /*# Mês Atual ⬇️*/
+      
+      VAR _MesAno = "Set/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      VAR _Resultado =
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+      VAR _Meta = [Meta Empresa] -- substitua pelo nome correto da sua medida/coluna de meta
+      RETURN
+          IF(_Resultado >= _Meta, "#C4DEC1", "#EFB5B9")
+    - 09. Set/26:
+      
+      VAR _MesAno = "Set/26"
+      VAR _TotalAtendimentos =
+          CALCULATE([Total Atendimentos], dCalendario[Mes_Ano] = _MesAno)
+      VAR _QtdeHoras =
+          CALCULATE([Qtde Horas], dCalendario[Mes_Ano] = _MesAno)
+      RETURN
+          DIVIDE(_TotalAtendimentos, _QtdeHoras)
+----------------------------------------
+Tabela: dCalendario
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Nm_Mes [string]
+    - Nm_Mes_Abrev [string]
+    - Mes_Ano [string]
+    - Classif_MesAno [int64]
+    - Dia_Sem_Nome [string]
+    - Dia_Sem_Abrev [string]
+    - Dia_Semana_No. [int64]
+    - Dia_Sem_Letra [string]
+    - Trimestre [string]
+    - SemanaAno [int64]
+    - FimDeSemana [string]
+    - Semestre [string]
+    - Ultimos6Meses [int64] (Calculada)
+    - Nm_Mes_Ano_Abrev [string]
+    - AnoAtual [int64] (Calculada)
+    - DiaNome [string]
+    - CategoriaExibicao [string]
+    - OrdemCategoria [int64]
+    - DiaDaSemana [int64]
+    - DiaMes [string]
+----------------------------------------
+Tabela: dMetaEmpresa
+  Colunas:
+    - CD_EMP_UNIF [int64]
+    - EMPRESA UNIF [string]
+    - META [double]
+    - DESAFIO [double]
+----------------------------------------
+Tabela: dPagamento
+  Colunas:
+    - ID_PGTO [int64]
+    - NM_PGTO [string]
+----------------------------------------
+Tabela: dCidade
+  Colunas:
+    - COD_UNIDADE [int64]
+    - NM_RAZAO SOCIAL [string]
+    - NM_FANTASIA [string]
+    - NM_SITE [string]
+    - NM_CIDADE [string]
+    - COD_FILIAL [int64]
+    - NM_FILIAL [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - LOCALIZAÇÃO [string]
+    - APENAS [string]
+    - CAPTADO [string]
+    - RESPONSAVEL [string]
+    - TIPO [string]
+    - REGIONAL [string]
+    - POLO [string]
+    - SUB REGIAO [string]
+    - CD_LOCALIDADE [string]
+    - REGIAO BRASIL [string]
+    - STATUS [string]
+    - TIPO_REDE [string]
+    - NR_TIPO_SERVICO_SAUDE [string]
+    - COD_EMPRESA [int64]
+    - CD_EMP_UNIF [int64]
+    - POLO_NOVO [string]
+    - CD_LOCALIDADE_POLO [string]
+    - CD_CIDADE_IBGE [int64]
+    - CD_NOME_UNIDADE [string] (Calculada)
+    - ENDERECO [string]
+    - RUA [string]
+    - NUMERO [int64]
+    - BAIRRO [string]
+    - TIPO_LOGRADOURO [string]
+    - CEP [int64]
+    - LATITUDE [double]
+    - LONGITUDE [double]
+    - CD_LOCALIDADE_CIDADE [string]
+    - OPERADORA [string] (Calculada)
+----------------------------------------
+Tabela: dPrestador
+  Colunas:
+    - NM_PRESTADOR [string]
+    - CD_PRESTADOR [int64]
+    - CD_NOME_MEDICO [string] (Calculada)
+    - CD_PESSOA [int64] (Calculada)
+----------------------------------------
+Tabela: dEspecialidade
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+    - BASICA_HAP [int64]
+    - CD_NOME_ESPECIALIDADE [string] (Calculada)
+----------------------------------------
+Tabela: TOP N
+  Colunas:
+    - TOP N [int64]
+  Medidas DAX (Regras de Negócio):
+    - Valor TOP N:
+      SELECTEDVALUE('TOP N'[TOP N])
+----------------------------------------
+Tabela: Parametro ICH
+  Colunas:
+    - ICH [double]
+  Medidas DAX (Regras de Negócio):
+    - Valor ICH:
+      SELECTEDVALUE('Parametro ICH'[ICH])
+----------------------------------------
+Tabela: btAtualizar
+  Colunas:
+    - ATUALIZACAO [dateTime]
+----------------------------------------
+Tabela: CodigosSemMovimento
+  Colunas:
+    - CD_LOCAL [int64]
+----------------------------------------
+Tabela: dDiretoria
+  Colunas:
+    - ID [int64]
+    - CD_MUNICIPIO [int64]
+    - NM_CIDADE [string]
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+    - CD_CLASSIFICACAO [int64]
+    - DS_CLASSIFICACAO [string]
+    - CASSIFICAÇÃO NOVA [string]
+    - DIRETOR [string]
+    - DIRETORIA [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+fProdutividade[DATA] ---> dCalendario[Date]
+fProdutividade[CD_PRESTADOR] ---> dPrestador[CD_PRESTADOR]
+fProdutividade[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+fProdutividade[CD_LOCAL] ---> dCidade[COD_UNIDADE]
+fProdutividade[ID_DIRETORIA] ---> dDiretoria[ID]
+dCidade[CD_EMP_UNIF] ---> dMetaEmpresa[CD_EMP_UNIF]
+fProdutividade[TP_PGTO] ---> dPagamento[ID_PGTO]

@@ -1,0 +1,1456 @@
+============================================================
+MAPEAMENTO DE REGRAS: Controle_Agendas.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: FatoAgendas
+  Colunas:
+    - EMPRESA [string]
+    - FILIAL [string]
+    - CD_LOCAL [int64]
+    - UNIDADE [string]
+    - CD_MEDICO [int64]
+    - MÉDICO [string]
+    - ESPECIALIDADE [string]
+    - STATUS DA NÃO ABERTURA DE AGENDA [string]
+    - Nome da Origem [string]
+    - Mes_Num [string]
+    - Ano [string]
+    - Data_Referencia [dateTime]
+    - Classificacao Status [string] (Calculada)
+    - CD_LOCALIDADE [string]
+    - ChaveLocalEsp [string]
+    - CD_CIDADE_IBGE [int64]
+    - CD_CLASSIFICACAO [string]
+    - Status Padronizado [string] (Calculada)
+    - CD_ESPECIALIDADE [string]
+    - REGIONAL [string]
+    - RESPONSAVEL [string]
+    - CIDADE [string]
+    - UF [string]
+    - ChaveLocalEsp_Display [string] (Calculada)
+    - ChaveLocalEsp_Final [string] (Calculada)
+    - ChaveCidade [string] (Calculada)
+    - REGIONAL_FILTER [string] (Calculada)
+    - EMPRESA_FILTER [string] (Calculada)
+    - POLO_NOVO [string]
+    - ChaveUnidade [string] (Calculada)
+----------------------------------------
+Tabela: CALENDARIO
+  Colunas:
+    - Data [dateTime]
+    - Ano [int64]
+    - Mes_Num [int64]
+    - Mes_Nome [string]
+    - Dia [int64]
+    - MesAno_Ordem [int64] (Calculada)
+    - Mes_Ano [string] (Calculada)
+----------------------------------------
+Tabela: Medidas
+  Colunas:
+    - Column [int64]
+  Medidas DAX (Regras de Negócio):
+    - Qtd Agendas Positivas:
+      
+      CALCULATE(
+          COUNTROWS(FatoAgendas),
+          FatoAgendas[Classificacao Status] = "Positivo"
+      )
+    - % Entrega:
+      
+      DIVIDE (
+          [Qtd Agendas Positivas],
+          [Qtd Agendas Consideradas]
+      )
+      
+      
+    - Tem Dados:
+      
+      IF (
+          [Qtd Agendas Consideradas] > 0,
+          1,
+          0
+      )
+      
+    - Qtd Agendas Consideradas:
+      
+      CALCULATE(
+          COUNTROWS(FatoAgendas),
+          FatoAgendas[Classificacao Status] <> "Nao Considerar"
+      )
+      
+      
+      
+      
+      
+    - Qtd Agendas Negativas:
+      
+      CALCULATE(
+          COUNTROWS(FatoAgendas),
+          FatoAgendas[Classificacao Status] = "Negativo"
+      )
+      
+    - Meta % Entrega:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          SWITCH(
+              TRUE(),
+              CorteAtivo = "1DU",     0.90,
+              CorteAtivo = "5DU",     0.95,
+              CorteAtivo = "10DU",    1.00,
+              1.00
+          )
+      
+    - % Acumulado Não Entregues:
+      
+      VAR TotalNegativas =
+          CALCULATE (
+              [Qtd Agendas Negativas],
+              ALL ( dCidade[EMPRESA] )
+          )
+      
+      VAR ValorAtual =
+          [Qtd Agendas Negativas]
+      
+      VAR Acumulado =
+          CALCULATE (
+              [Qtd Agendas Negativas],
+              FILTER (
+                  ALL ( dCidade[EMPRESA] ),
+                  [Qtd Agendas Negativas] >= ValorAtual
+              )
+          )
+      
+      RETURN
+      DIVIDE ( Acumulado, TotalNegativas )
+      
+      
+    - Tipo Visual Status:
+      
+      IF (
+          SELECTEDVALUE ( FatoAgendas[Classificacao Status] ) = "Positivo",
+          "Positivo",
+          "Negativo"
+      )
+      
+    - Qtd Agendas Consideradas Mês Anterior:
+      
+      CALCULATE (
+          [Qtd Agendas Consideradas],
+          PREVIOUSMONTH ( CALENDARIO[Data] )
+      )
+      
+    - Variação % vs Mês Anterior:
+      
+      VAR Atual = [Qtd Agendas Consideradas]
+      VAR Anterior = [Qtd Agendas Consideradas Mês Anterior]
+      RETURN
+      DIVIDE ( Atual - Anterior, Anterior )
+      
+    - Variação Formatada:
+      
+      VAR VarPerc = [Variação % vs Mês Anterior]
+      RETURN
+      IF (
+          ISBLANK ( VarPerc ),
+          BLANK(),
+          IF (
+              VarPerc > 0,
+              "▲ " & FORMAT ( VarPerc, "0.0%" ),
+              "▼ " & FORMAT ( VarPerc, "0.0%" )
+          )
+      )
+      
+    - Cor Variação:
+      
+      IF (
+          [Variação % vs Mês Anterior] >= 0,
+          "#1A8F3C",   -- verde
+          "#D64545"    -- vermelho
+      )
+      
+    - Qtd Entregues Mês Anterior:
+      
+      CALCULATE (
+          [Qtd Agendas Positivas],
+          PREVIOUSMONTH ( CALENDARIO[Data] )
+      )
+      
+    - Variação Entregues %:
+      
+      VAR Atual = [Qtd Agendas Positivas]
+      VAR Anterior = [Qtd Entregues Mês Anterior]
+      RETURN
+      DIVIDE ( Atual - Anterior, Anterior )
+      
+    - Variação Entregues Formatada:
+      
+      VAR VarPerc = [Variação Entregues %]
+      RETURN
+      IF (
+          ISBLANK ( VarPerc ),
+          BLANK(),
+          IF (
+              VarPerc > 0,
+              "▲ " & FORMAT ( VarPerc, "0.0%" ),
+              "▼ " & FORMAT ( VarPerc, "0.0%" )
+          )
+      )
+      
+    - Cor Variação Entregues:
+      
+      VAR VarPerc = [Variação Entregues %]
+      RETURN
+      SWITCH(
+          TRUE(),
+          ISBLANK(VarPerc), "#6C757D",
+          VarPerc > 0, "#1A8F3C",
+          VarPerc < 0, "#D64545",
+          "#6C757D"
+      )
+      
+      
+      
+    - Qtd Não Entregues Mês Anterior:
+      
+      CALCULATE (
+          [Qtd Agendas Negativas],
+          PREVIOUSMONTH ( CALENDARIO[Data] )
+      )
+      
+    - Variação Não Entregues %:
+      
+      VAR Atual = [Qtd Agendas Negativas]
+      VAR Anterior = [Qtd Não Entregues Mês Anterior]
+      RETURN
+      DIVIDE ( Atual - Anterior, Anterior )
+      
+    - Variação Não Entregues Formatada:
+      
+      VAR VarPerc = [Variação Não Entregues %]
+      RETURN
+      IF (
+          ISBLANK ( VarPerc ),
+          BLANK(),
+          IF (
+              VarPerc > 0,
+              "▲ " & FORMAT ( VarPerc, "0.0%" ),
+              "▼ " & FORMAT ( VarPerc, "0.0%" )
+          )
+      )
+      
+    - Cor Variação Não Entregues:
+      
+      VAR VarPerc = [Variação Não Entregues %]
+      RETURN
+      SWITCH(
+          TRUE(),
+          ISBLANK(VarPerc), "#6C757D",
+          VarPerc > 0, "#D64545",   -- aumentou negativas = ruim
+          VarPerc < 0, "#1A8F3C",   -- diminuiu negativas = bom
+          "#6C757D"
+      )
+      
+    - Cor % Entrega:
+      
+      IF(
+          [% Entrega] >= 0.9,
+          "#3A9D7A",
+          "#F39C12"
+      )
+      
+    - Gap para Meta (p.p):
+      
+      [Meta % Entrega] - [% Entrega]
+      
+    - Falta para Meta:
+      
+      VAR Atual = [% Entrega]
+      VAR Meta = [Meta % Entrega]
+      RETURN
+      IF(
+          Atual >= Meta,
+          0,
+          Meta - Atual
+      )
+      
+    - Atingido da Meta:
+      
+      MIN([% Entrega], [Meta % Entrega])
+      
+    - Nome Mês Anterior:
+      
+      VAR MesAnterior = 
+          CALCULATE(
+              MAX(CALENDARIO[Data]),
+              PREVIOUSMONTH(CALENDARIO[Data])
+          )
+      RETURN
+      IF(
+          ISBLANK(MesAnterior),
+          "mês anterior",
+          FORMAT(MesAnterior, "MMMM/YY", "pt-BR")
+      )
+    - Frase Meta Entrega:
+      
+      VAR Atual = [% Entrega]
+      VAR Meta = [Meta % Entrega]
+      VAR Gap = Meta - Atual
+      RETURN
+          SWITCH(
+              TRUE(),
+              ISBLANK(Atual) || Atual = 0, "Dados não disponíveis",
+              Atual >= Meta, "Meta de " & FORMAT(Meta, "0%") & " superada em " & FORMAT(ABS(Gap), "0.0%"),
+              Atual < Meta, "Faltam " & FORMAT(ABS(Gap), "0.0%") & " para atingir a meta de " & FORMAT(Meta, "0%")
+          )
+    - Qtd Consideradas Mês Anterior:
+      
+      CALCULATE(
+          [Qtd Agendas Consideradas],
+          PREVIOUSMONTH(CALENDARIO[Data])
+      )
+    - Qtd Entregues Mês Anterior Label:
+      
+      VAR Valor = [Qtd Entregues Mês Anterior]
+      VAR Mes = [Nome Mês Anterior]
+      RETURN
+      IF(ISBLANK(Valor), BLANK(), FORMAT(Valor, "#,##0") & " (" & Mes & ")")
+    - Qtd Não Entregues Mês Anterior Label:
+      
+      VAR Valor = [Qtd Não Entregues Mês Anterior]
+      VAR Mes = [Nome Mês Anterior]
+      RETURN
+      IF(ISBLANK(Valor), BLANK(),FORMAT(Valor, "#,##0") & " (" & Mes & ")")
+    - Qtd Consideradas Mês Anterior Label:
+      
+      VAR Valor = [Qtd Consideradas Mês Anterior]
+      VAR Mes = [Nome Mês Anterior]
+      RETURN
+      IF(
+          ISBLANK(Valor),
+          BLANK(),
+          FORMAT(Valor, "#,##0") & " (" & Mes & ")"
+      )
+    - % do Total Negativos:
+      
+      VAR TotalGeral = CALCULATE(
+          [Qtd Agendas Negativas],
+          REMOVEFILTERS(FatoAgendas[FILIAL]),
+          REMOVEFILTERS(FatoAgendas[UNIDADE])
+      )
+      VAR TotalFilial = CALCULATE(
+          [Qtd Agendas Negativas],
+          REMOVEFILTERS(FatoAgendas[UNIDADE])
+      )
+      RETURN
+      IF(
+          ISBLANK([Qtd Agendas Negativas]),
+          BLANK(),
+          IF(
+              ISINSCOPE(FatoAgendas[UNIDADE]),
+              DIVIDE([Qtd Agendas Negativas], TotalFilial),
+              DIVIDE([Qtd Agendas Negativas], TotalGeral)
+          )
+      )
+    - Variação Negativos vs Mês Anterior:
+      
+      VAR MesAtual = CALCULATE(
+          MAX(CALENDARIO[Mes_Num]),
+          ALLSELECTED(CALENDARIO)
+      )
+      VAR AnoAtual = CALCULATE(
+          MAX(CALENDARIO[Ano]),
+          ALLSELECTED(CALENDARIO)
+      )
+      VAR Atual = CALCULATE(
+          [Qtd Agendas Negativas],
+          CALENDARIO[Mes_Num] = MesAtual,
+          CALENDARIO[Ano] = AnoAtual
+      )
+      VAR Anterior = CALCULATE(
+          [Qtd Agendas Negativas],
+          PREVIOUSMONTH(CALENDARIO[Data]),
+          CALENDARIO[Mes_Num] = MesAtual - 1
+      )
+      RETURN
+      IF(
+          ISBLANK(Anterior) || ISBLANK(Atual),
+          BLANK(),
+          DIVIDE(Atual - Anterior, Anterior)
+      )
+    - Variação Negativos Formatada:
+      
+      VAR MesAtual = CALCULATE(MAX(CALENDARIO[Mes_Num]), ALLSELECTED())
+      VAR AnoAtual = CALCULATE(MAX(CALENDARIO[Ano]), ALLSELECTED())
+      VAR MesAnteriorNum = IF(MesAtual = 1, 12, MesAtual - 1)
+      VAR AnoAnteriorNum = IF(MesAtual = 1, AnoAtual - 1, AnoAtual)
+      VAR NegAtual = CALCULATE(
+          [Qtd Agendas Negativas],
+          FILTER(ALL(CALENDARIO), CALENDARIO[Mes_Num] = MesAtual && CALENDARIO[Ano] = AnoAtual)
+      )
+      VAR NegAnterior = CALCULATE(
+          [Qtd Agendas Negativas],
+          FILTER(ALL(CALENDARIO), CALENDARIO[Mes_Num] = MesAnteriorNum && CALENDARIO[Ano] = AnoAnteriorNum)
+      )
+      VAR Variacao = DIVIDE(NegAtual - NegAnterior, NegAnterior)
+      RETURN
+      IF(
+          ISBLANK(NegAnterior) || ISBLANK(NegAtual), "—",
+          IF(NegAnterior <= 2, "—",
+          IF(Variacao > 0, "▲ " & FORMAT(ABS(Variacao), "0%"),
+          IF(Variacao < 0, "▼ " & FORMAT(ABS(Variacao), "0%"),
+          "► 0%")))
+      )
+    - Qtd Cobrando Agenda:
+      
+      VAR Resultado = CALCULATE(
+          COUNTROWS(FatoAgendas),
+          FatoAgendas[STATUS DA NÃO ABERTURA DE AGENDA] = "COBRANDO AGENDA"
+      )
+      RETURN IF(ISBLANK(Resultado), "-", Resultado)
+    - Qtd Negociando Credenciamento:
+      
+      VAR Resultado = CALCULATE(
+          COUNTROWS(FatoAgendas),
+          FatoAgendas[STATUS DA NÃO ABERTURA DE AGENDA] = "NEGOCIANDO COM CREDENCIAMENTO"
+      )
+      RETURN IF(ISBLANK(Resultado),"-",Resultado)
+    - Qtd Médico Pendência:
+      
+      VAR Resultado = CALCULATE(
+          COUNTROWS(FatoAgendas),
+          FatoAgendas[STATUS DA NÃO ABERTURA DE AGENDA] = "MÉDICO COM PENDÊNCIA DE PAGAMENTOS"
+      )
+      RETURN IF(ISBLANK(Resultado),"-",Resultado)
+    - Qtd Consideradas Diretor:
+      
+      CALCULATE(
+          [Qtd Agendas Consideradas],
+          USERELATIONSHIP(FatoAgendas[ChaveLocalEsp_Final], 'dDiretoria'[ID])
+      )
+    - Qtd Entregues Diretor:
+      
+      CALCULATE(
+          [Qtd Agendas Positivas],
+          USERELATIONSHIP(FatoAgendas[ChaveLocalEsp_Final], 'dDiretoria'[ID])
+      )
+    - % Entrega Diretor:
+      
+      DIVIDE(
+          [Qtd Entregues Diretor],
+          [Qtd Consideradas Diretor]
+      )
+    - Status Meta Diretor:
+      
+      IF(
+          ISBLANK([% Entrega Diretor]),
+          BLANK(),
+          IF([% Entrega Diretor] >= 0.90, "✅ Atingiu", "⚠️ Abaixo")
+      )
+    - % Não Entrega Diretor:
+      
+      1 - [% Entrega Diretor]
+    - Qtd Não Entregues Diretor:
+      
+      [Qtd Consideradas Diretor] - [Qtd Entregues Diretor]
+    - Variação Entrega Diretor_format:
+      
+      VAR MesAtual = CALCULATE(MAX(CALENDARIO[Mes_Num]), ALLSELECTED(CALENDARIO))
+      VAR AnoAtual = CALCULATE(MAX(CALENDARIO[Ano]), ALLSELECTED(CALENDARIO))
+      VAR MesAnteriorNum = IF(MesAtual = 1, 12, MesAtual - 1)
+      VAR AnoAnteriorNum = IF(MesAtual = 1, AnoAtual - 1, AnoAtual)
+      VAR PctAtual = CALCULATE(
+          [% Entrega],
+          FILTER(ALL(CALENDARIO), CALENDARIO[Mes_Num] = MesAtual && CALENDARIO[Ano] = AnoAtual)
+      )
+      VAR PctAnterior = CALCULATE(
+          [% Entrega],
+          FILTER(ALL(CALENDARIO), CALENDARIO[Mes_Num] = MesAnteriorNum && CALENDARIO[Ano] = AnoAnteriorNum)
+      )
+      VAR Variacao = PctAtual - PctAnterior
+      RETURN
+          IF(
+              ISBLANK(PctAnterior) || ISBLANK(PctAtual), "—",
+              IF(Variacao > 0, "▲ " & FORMAT(ABS(Variacao), "0.0%"),
+              IF(Variacao < 0, "▼ " & FORMAT(ABS(Variacao), "0.0%"),
+              "► 0.0%"))
+          )
+    - Qtd Médicos com Pendência:
+      
+      CALCULATE(
+          DISTINCTCOUNT(FatoAgendas[MÉDICO]),
+          FatoAgendas[Classificacao Status] = "Negativo"
+      )
+    - Qtd Médicos 100% Entrega:
+      
+      CALCULATE(
+          DISTINCTCOUNT(FatoAgendas[MÉDICO]),
+          FatoAgendas[Classificacao Status] = "Positivo"
+      )
+    - % Entrega Médico:
+      
+      VAR Positivas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Positivo") + 0
+      VAR Consideradas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] <> "Nao Considerar")
+      RETURN
+      IF(
+          ISBLANK(Consideradas) || Consideradas = 0, BLANK(),
+          DIVIDE(Positivas, Consideradas, 0)
+      )
+    - Status Médico:
+      
+      VAR Pct = [% Entrega Médico]
+      VAR Consideradas = [Qtd Agendas Consideradas]
+      RETURN
+      IF(
+          ISBLANK(Consideradas) || Consideradas = 0, BLANK(),
+          IF(Pct >= 0.90, "✅ Ótimo",
+          IF(Pct >= 0.51, "⚠️ Atenção",
+          "🔴 Crítico"))
+      )
+    - Legenda Status Médico:
+      
+      "<div style='display:flex;align-items:center;gap:6px;font-family:Segoe UI,sans-serif;padding:6px 12px;background:white;border-radius:8px;border:1px solid #f0f0f0'>
+      <span style='font-size:10px;font-weight:700;color:#888;text-transform:uppercase;margin-right:8px'>Status Médico</span>
+      <span style='display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#e8f8f0;color:#1e7e4a;border:1px solid #b8ecd1'>✅ Ótimo <span style='font-size:9px;opacity:0.7'>90%–100%</span></span>
+      <span style='display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#fff8e6;color:#946c00;border:1px solid #fde8a0'>⚠️ Atenção <span style='font-size:9px;opacity:0.7'>51%–89%</span></span>
+      <span style='display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#fdf0f0;color:#9b1c1c;border:1px solid #f5c0c0'>🔴 Crítico <span style='font-size:9px;opacity:0.7'>0%–50%</span></span>
+      </div>"
+    - Card Total Médicos HTML:
+      
+      "<div style='font-family:Segoe UI,sans-serif;background:transparent;padding:12px 16px;width:259px;height:93px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box'>
+      <div style='display:flex;align-items:center;gap:8px'>
+      <div style='position:relative;width:22px;height:22px'>
+      <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>
+      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/>
+      </svg>
+      <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#555' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' style='position:absolute;bottom:-2px;right:-4px;background:white;border-radius:50%;padding:1px'>
+      <line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/>
+      </svg>
+      </div>
+      <span style='font-size:11px;color:#888;font-weight:500'>Total de Médicos</span>
+      </div>
+      <div style='font-size:26px;font-weight:800;color:#1a1a2e;text-align:center'>" & SUBSTITUTE(FORMAT([Qtd Total Médicos], "0,000"), ",", ".") & "</div>
+      <span style='font-size:10px;font-weight:600;padding:2px 10px;border-radius:20px;background:#f0f4f8;color:#555;display:inline-block'>Período selecionado</span>
+      </div>"
+    - Qtd Total Médicos:
+      
+      CALCULATE(
+          DISTINCTCOUNT(FatoAgendas[CD_MEDICO]),
+          FILTER(
+              VALUES(FatoAgendas[CD_MEDICO]),
+              VAR Consideradas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] <> "Nao Considerar")
+              RETURN Consideradas > 0
+          )
+      )
+    - Card Médicos Ótimos HTML:
+      
+      "<div style='font-family:Segoe UI,sans-serif;background:transparent;padding:12px 16px;width:259px;height:93px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box'>
+      <div style='display:flex;align-items:center;gap:8px'>
+      <div style='position:relative;width:22px;height:22px'>
+      <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>
+      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/>
+      </svg>
+      <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgb(30,126,74)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' style='position:absolute;bottom:-2px;right:-4px;background:white;border-radius:50%;padding:1px'>
+      <polyline points='4 12 9 17 20 6'/>
+      </svg>
+      </div>
+      <span style='font-size:11px;color:#888;font-weight:500'>Médicos Ótimos</span>
+      </div>
+      <div style='font-size:26px;font-weight:800;color:rgb(30,126,74);text-align:center'>" & SUBSTITUTE(FORMAT([Qtd Médicos Ótimos], "0,000"), ",", ".") & "</div>
+      <span style='font-size:10px;font-weight:600;padding:2px 10px;border-radius:20px;background:rgb(232,248,240);color:rgb(30,126,74);display:inline-block'>90% — 100% entrega</span>
+      </div>"
+    - Qtd Médicos Ótimos:
+      
+      CALCULATE(
+          DISTINCTCOUNT(FatoAgendas[CD_MEDICO]),
+          FILTER(
+              VALUES(FatoAgendas[CD_MEDICO]),
+              VAR Positivas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Positivo")
+              VAR Consideradas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] <> "Nao Considerar")
+              RETURN Consideradas > 0 && DIVIDE(Positivas, Consideradas) >= 0.90
+          )
+      )
+    - Qtd Médicos Atenção:
+      
+      CALCULATE(
+          DISTINCTCOUNT(FatoAgendas[CD_MEDICO]),
+          FILTER(
+              VALUES(FatoAgendas[CD_MEDICO]),
+              VAR Positivas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Positivo")
+              VAR Consideradas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] <> "Nao Considerar")
+              VAR Pct = DIVIDE(Positivas, Consideradas, 0)
+              RETURN Consideradas > 0 && Pct > 0.50 && Pct < 0.90
+          )
+      )
+    - Qtd Médicos Críticos:
+      
+      CALCULATE(
+          DISTINCTCOUNT(FatoAgendas[CD_MEDICO]),
+          FILTER(
+              VALUES(FatoAgendas[CD_MEDICO]),
+              VAR Positivas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Positivo")
+              VAR Consideradas = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] <> "Nao Considerar")
+              VAR Pct = DIVIDE(Positivas, Consideradas)
+              RETURN Consideradas > 0 && Pct <= 0.50
+          )
+      )
+    - Card Médicos Atenção HTML:
+      
+      "<div style='font-family:Segoe UI,sans-serif;background:transparent;padding:12px 16px;width:259px;height:93px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box'>
+      <div style='display:flex;align-items:center;gap:8px'>
+      <div style='position:relative;width:22px;height:22px'>
+      <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>
+      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/>
+      </svg>
+      <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgb(148,108,0)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' style='position:absolute;bottom:-2px;right:-4px;background:white;border-radius:50%;padding:1px'>
+      <line x1='12' y1='5' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/>
+      </svg>
+      </div>
+      <span style='font-size:11px;color:#888;font-weight:500'>Médicos em Atenção</span>
+      </div>
+      <div style='font-size:26px;font-weight:800;color:rgb(148,108,0);text-align:center'>" & SUBSTITUTE(FORMAT([Qtd Médicos Atenção], "#,##0"), ",", ".") & "</div>
+      <span style='font-size:10px;font-weight:600;padding:2px 10px;border-radius:20px;background:rgb(255,248,230);color:rgb(148,108,0);display:inline-block'>51% — 89% entrega</span>
+      </div>"
+    - Card Médicos Críticos HTML:
+      
+      "<div style='font-family:Segoe UI,sans-serif;background:transparent;padding:12px 16px;width:259px;height:93px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box'>
+      <div style='display:flex;align-items:center;gap:8px'>
+      <div style='position:relative;width:22px;height:22px'>
+      <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>
+      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/>
+      </svg>
+      <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgb(155,28,28)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' style='position:absolute;bottom:-2px;right:-4px;background:white;border-radius:50%;padding:1px'>
+      <line x1='6' y1='6' x2='18' y2='18'/><line x1='18' y1='6' x2='6' y2='18'/>
+      </svg>
+      </div>
+      <span style='font-size:11px;color:#888;font-weight:500'>Médicos Críticos</span>
+      </div>
+      <div style='font-size:26px;font-weight:800;color:rgb(155,28,28);text-align:center'>" & SUBSTITUTE(FORMAT([Qtd Médicos Críticos], "#,##0"), ",", ".") & "</div>
+      <span style='font-size:10px;font-weight:600;padding:2px 10px;border-radius:20px;background:rgb(253,240,240);color:rgb(155,28,28);display:inline-block'>0% — 50% entrega</span>
+      </div>"
+    - Meta Diretor:
+      0.95
+    - Performance Diretor:
+      
+      VAR MesAtual = CALCULATE(MAX(FatoAgendas[Mes_Num]), ALL(FatoAgendas))
+      VAR AnoAtual = CALCULATE(MAX(FatoAgendas[Ano]), ALL(FatoAgendas))
+      VAR Entrega = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Num] = INT(MesAtual), CALENDARIO[Ano] = INT(AnoAtual)),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Num] = INT(MesAtual), CALENDARIO[Ano] = INT(AnoAtual))
+      )
+      VAR Variacao = Entrega - 0.95
+      RETURN
+      IF(
+          ISBLANK(Entrega), BLANK(),
+          IF(
+              Entrega >= 0.95,
+              "▲ " & FORMAT(Variacao, "+0.0%;-0.0%"),
+              "▼ " & FORMAT(Variacao, "+0.0%;-0.0%")
+          )
+      )
+    - Jan/26:
+      
+      VAR _MesAno = "jan/2026"
+      VAR _Resultado = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno)
+      )
+      RETURN
+      IF(ISBLANK(_Resultado), "-", FORMAT(_Resultado, "0.0%"))
+    - Fev/26:
+      
+      VAR _MesAno = "fev/2026"
+      VAR _Resultado = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno)
+      )
+      RETURN
+      IF(ISBLANK(_Resultado), "-", FORMAT(_Resultado, "0.0%"))
+    - Mar/26:
+      
+      VAR _MesAno = "mar/2026"
+      VAR _Resultado = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno)
+      )
+      RETURN
+      IF(ISBLANK(_Resultado), "-", FORMAT(_Resultado, "0.0%"))
+    - Abr/26:
+      
+      VAR _MesAno = "abr/2026"
+      VAR _Resultado = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno)
+      )
+      RETURN
+      IF(ISBLANK(_Resultado), "-", FORMAT(_Resultado, "0.0%"))
+    - Qtd Total Agendas:
+      
+      VAR _Resultado = COUNTROWS(FatoAgendas)
+      RETURN IF(ISBLANK(_Resultado), BLANK(), _Resultado)
+    - Qtd Agendas Nao Consideradas:
+      
+      VAR _Resultado = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Nao Considerar")
+      RETURN IF(ISBLANK(_Resultado), "-", _Resultado)
+    - % Aproveitamento Total:
+      
+      VAR TotalGeral = CALCULATE([Qtd Total Agendas], ALL(FatoAgendas[EMPRESA]), ALL(FatoAgendas[Status Padronizado]))
+      VAR TotalEmpresa = CALCULATE([Qtd Total Agendas], ALL(FatoAgendas[Status Padronizado]))
+      VAR TotalAtual = [Qtd Total Agendas]
+      VAR IsStatus = ISINSCOPE(FatoAgendas[Status Padronizado])
+      RETURN
+      IF(
+          ISBLANK(TotalAtual), BLANK(),
+          IF(
+              IsStatus,
+              DIVIDE(TotalAtual, TotalEmpresa),
+              DIVIDE(TotalAtual, TotalGeral)
+          )
+      )
+    - Qtd Agendas PositivasAG:
+      
+      VAR _Resultado = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Positivo")
+      RETURN IF(ISBLANK(_Resultado), "-", _Resultado)
+    - Qtd Agendas NegativasAG:
+      
+      VAR _Resultado = CALCULATE(COUNTROWS(FatoAgendas), FatoAgendas[Classificacao Status] = "Negativo")
+      RETURN IF(ISBLANK(_Resultado), "-", _Resultado)
+    - Qtd Consideradas Diretoria:
+      
+      CALCULATE(
+          [Qtd Agendas Consideradas],
+          USERELATIONSHIP(FatoAgendas[ChaveLocalEsp_Final], 'dDiretoria'[ID])
+      )
+    - Qtd Entregues Diretoria:
+      
+      CALCULATE(
+          [Qtd Agendas Positivas],
+          USERELATIONSHIP(FatoAgendas[ChaveLocalEsp_Final], 'dDiretoria'[ID])
+      )
+    - Qtd Não Entregues Diretoria:
+      
+      [Qtd Consideradas Diretoria] - [Qtd Entregues Diretoria]
+    - % Entrega Diretoria:
+      
+      DIVIDE(
+          [Qtd Entregues Diretoria],
+          [Qtd Consideradas Diretoria]
+      )
+    - % Não Entrega Diretoria:
+      
+      1 - [% Entrega Diretoria]
+    - Corte Ativo:
+      
+      SELECTEDVALUE(dCorte[Corte])
+    - Qtd Total Agendas D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo),
+              [Qtd Total Agendas],
+              CALCULATE(COUNTROWS(FatoHistorico), FatoHistorico[CORTE] = CorteAtivo)
+          ) 
+    - Qtd Agendas Negativas D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR AnoSelecionado = SELECTEDVALUE(CALENDARIO[Ano])
+      VAR MesSelecionado = SELECTEDVALUE(CALENDARIO[Mes_Num])
+      VAR MesRef =
+          IF(
+              NOT ISBLANK(AnoSelecionado) && NOT ISBLANK(MesSelecionado),
+              FORMAT(AnoSelecionado, "0000") & "-" & FORMAT(MesSelecionado, "00"),
+              BLANK()
+          )
+      VAR TotalLinhas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[MES_REF] = MesRef,
+              FatoHistorico[CORTE] = CorteAtivo
+          )
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Qtd Agendas Negativas],
+              IF(
+                  ISBLANK(MesRef) || ISBLANK(TotalLinhas) || TotalLinhas = 0,
+                  0,
+                  CALCULATE(
+                      COUNTROWS(FatoHistorico),
+                      FatoHistorico[Classificacao Status Hist] = "Negativo",
+                      FatoHistorico[MES_REF] = MesRef
+                  )
+              )
+          )
+    - Qtd Agendas Positivas D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR AnoSelecionado = SELECTEDVALUE(CALENDARIO[Ano])
+      VAR MesSelecionado = SELECTEDVALUE(CALENDARIO[Mes_Num])
+      VAR MesRef =
+          IF(
+              NOT ISBLANK(AnoSelecionado) && NOT ISBLANK(MesSelecionado),
+              FORMAT(AnoSelecionado, "0000") & "-" & FORMAT(MesSelecionado, "00"),
+              BLANK()
+          )
+      VAR TotalLinhas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[MES_REF] = MesRef,
+              FatoHistorico[CORTE] = CorteAtivo
+          )
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Qtd Agendas Positivas],
+              IF(
+                  ISBLANK(MesRef) || ISBLANK(TotalLinhas) || TotalLinhas = 0,
+                  0,
+                  CALCULATE(
+                      COUNTROWS(FatoHistorico),
+                      FatoHistorico[Classificacao Status Hist] = "Positivo",
+                      FatoHistorico[MES_REF] = MesRef
+                  )
+              )
+          )
+    - Qtd Agendas Consideradas D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR AnoSelecionado = SELECTEDVALUE(CALENDARIO[Ano])
+      VAR MesSelecionado = SELECTEDVALUE(CALENDARIO[Mes_Num])
+      VAR MesRef =
+          IF(
+              NOT ISBLANK(AnoSelecionado) && NOT ISBLANK(MesSelecionado),
+              FORMAT(AnoSelecionado, "0000") & "-" & FORMAT(MesSelecionado, "00"),
+              BLANK()
+          )
+      VAR TotalLinhas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[MES_REF] = MesRef,
+              FatoHistorico[CORTE] = CorteAtivo
+          )
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Qtd Agendas Consideradas],
+              IF(
+                  ISBLANK(MesRef) || ISBLANK(TotalLinhas) || TotalLinhas = 0,
+                  0,
+                  CALCULATE(
+                      COUNTROWS(FatoHistorico),
+                      FatoHistorico[Classificacao Status Hist] <> "Nao Considerar",
+                      FatoHistorico[MES_REF] = MesRef
+                  )
+              )
+          )
+    - % Entrega D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR AnoSelecionado = SELECTEDVALUE(CALENDARIO[Ano])
+      VAR MesSelecionado = SELECTEDVALUE(CALENDARIO[Mes_Num])
+      VAR MesRef =
+          IF(
+              NOT ISBLANK(AnoSelecionado) && NOT ISBLANK(MesSelecionado),
+              FORMAT(AnoSelecionado, "0000") & "-" & FORMAT(MesSelecionado, "00"),
+              BLANK()
+          )
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [% Entrega],
+              IF(
+                  ISBLANK(MesRef),
+                  BLANK(),
+                  CALCULATE(
+                      DIVIDE(
+                          CALCULATE(COUNTROWS(FatoHistorico), FatoHistorico[Classificacao Status Hist] = "Positivo"),
+                          CALCULATE(COUNTROWS(FatoHistorico), FatoHistorico[Classificacao Status Hist] <> "Nao Considerar")
+                      ),
+                      FatoHistorico[MES_REF] = MesRef,
+                      TREATAS(VALUES(FatoAgendas[EMPRESA]), FatoHistorico[EMPRESA]),
+                      TREATAS(
+                          UNION(VALUES(FatoAgendas[REGIONAL]), ROW("REGIONAL", BLANK())),
+                          FatoHistorico[REGIONAL]
+                      )
+                  )
+              )
+          )
+    - Variação Formatada D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Variação Formatada],
+              "--"
+          )
+    - Qtd Consideradas Mês Anterior Label D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Qtd Consideradas Mês Anterior Label],
+              "--"
+          )
+    - Variação Entregues Formatada D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Variação Entregues Formatada],
+              "--"
+          )
+    - Qtd Entregues Mês Anterior Label D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Qtd Entregues Mês Anterior Label],
+              "--"
+          )
+    - Variação Não Entregues Formatada D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Variação Não Entregues Formatada],
+              "--"
+          )
+    - Qtd Não Entregues Mês Anterior Label D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Qtd Não Entregues Mês Anterior Label],
+              "--"
+          )
+    - Frase Meta Entrega D:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR Atual = [% Entrega D]
+      VAR Meta = [Meta % Entrega]
+      VAR Gap = Meta - Atual
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              [Frase Meta Entrega],
+              SWITCH(
+                  TRUE(),
+                  ISBLANK(Atual) || Atual = 0, "Dados não disponíveis",
+                  Atual >= Meta, "Meta de " & FORMAT(Meta, "0%") & " superada em " & FORMAT(ABS(Gap), "0.0%"),
+                  Atual < Meta, "Faltam " & FORMAT(ABS(Gap), "0.0%") & " para atingir a meta de " & FORMAT(Meta, "0%")
+              )
+          )
+    - % Entrega Hist:
+      
+      VAR _corte = MAX(FatoHistorico[CORTE])
+      VAR _mesref = MAX(FatoHistorico[MES_REF])
+      VAR Positivas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[CORTE] = _corte,
+              FatoHistorico[MES_REF] = _mesref,
+              FatoHistorico[STATUS DA NÃO ABERTURA DE AGENDA] = "AGENDA ENTREGUE"
+          )
+      VAR Consideradas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[CORTE] = _corte,
+              FatoHistorico[MES_REF] = _mesref,
+              FatoHistorico[STATUS DA NÃO ABERTURA DE AGENDA] <> ""
+          )
+      RETURN
+          IF(
+              ISBLANK(Consideradas) || Consideradas = 0,
+              0,
+              DIVIDE(Positivas, Consideradas)
+          )
+    - Teste Hist:
+      
+      COUNTROWS(FatoHistorico)
+    - Legenda HTML:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR MetaLabel =
+          SWITCH(
+              TRUE(),
+              CorteAtivo = "1DU",  "Meta 1º DU: 90%",
+              CorteAtivo = "5DU",  "Meta 5º DU: 95%",
+              CorteAtivo = "10DU", "Meta 10º DU: 100%",
+              "Meta: 100%"
+          )
+      VAR LimiteVerde =
+          SWITCH(
+              TRUE(),
+              CorteAtivo = "1DU",  "&#8805; 90%",
+              CorteAtivo = "5DU",  "&#8805; 95%",
+              CorteAtivo = "10DU", "&#8805; 100%",
+              "&#8805; 100%"
+          )
+      VAR LimiteAmarelo =
+          SWITCH(
+              TRUE(),
+              CorteAtivo = "1DU",  "85-89%",
+              CorteAtivo = "5DU",  "90-94%",
+              CorteAtivo = "10DU", "95-99%",
+              "95-99%"
+          )
+      VAR LimiteCritico =
+          SWITCH(
+              TRUE(),
+              CorteAtivo = "1DU",  "&#60; 85%",
+              CorteAtivo = "5DU",  "&#60; 90%",
+              CorteAtivo = "10DU", "&#60; 95%",
+              "&#60; 95%"
+          )
+      RETURN
+      "<!DOCTYPE html>
+      <html>
+      <head>
+      <meta charset='UTF-8'>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: 'Segoe UI', sans-serif;
+          background: transparent;
+          display: flex;
+          align-items: center;
+          height: 100vh;
+          padding: 0 12px;
+        }
+        .legenda {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .item {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+        }
+        .label { font-size: 9px; font-weight: 600; color: #2c2c2c; }
+        .meta { font-size: 9px; font-weight: 700; color: #1e4d7b; margin-left: 6px; padding-left: 10px; border-left: 1px solid #ccc; }
+      </style>
+      </head>
+      <body>
+        <div class='legenda'>
+          <div class='item'>
+            <div class='dot' style='background:#1F7A4C'></div>
+            <span class='label'>" & LimiteVerde & " Meta atingida</span>
+          </div>
+          <div class='item'>
+            <div class='dot' style='background:#F39C12'></div>
+            <span class='label'>" & LimiteAmarelo & " Atenção</span>
+          </div>
+          <div class='item'>
+            <div class='dot' style='background:#C0392B'></div>
+            <span class='label'>" & LimiteCritico & " Crítico</span>
+          </div>
+          <span class='meta'>" & MetaLabel & "</span>
+        </div>
+      </body>
+      </html>"
+    - Frase Contexto Corte:
+      
+      VAR CorteAtivo = SELECTEDVALUE(dCorte[Corte])
+      VAR CorteLabel = SELECTEDVALUE(dCorte[Label])
+      VAR AnoSelecionado = SELECTEDVALUE(CALENDARIO[Ano])
+      VAR MesSelecionado = SELECTEDVALUE(CALENDARIO[Mes_Num])
+      VAR MesRef =
+          IF(
+              NOT ISBLANK(AnoSelecionado) && NOT ISBLANK(MesSelecionado),
+              FORMAT(AnoSelecionado, "0000") & "-" & FORMAT(MesSelecionado, "00"),
+              BLANK()
+          )
+      VAR MesLabel =
+          FORMAT(DATE(AnoSelecionado, MesSelecionado, 1), "MMMM/YY", "pt-BR")
+      VAR DataCorte =
+          CALCULATE(
+              MAX(FatoHistorico[DATA_CORTE]),
+              FatoHistorico[MES_REF] = MesRef,
+              FatoHistorico[CORTE] = CorteAtivo
+          )
+      VAR TotalLinhas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[MES_REF] = MesRef,
+              FatoHistorico[CORTE] = CorteAtivo
+          )
+      VAR DataPrevista =
+          SWITCH(
+              TRUE(),
+              CorteAtivo = "1DU"  && MesSelecionado = 1,  "01/12/2025",
+              CorteAtivo = "5DU"  && MesSelecionado = 1,  "05/12/2025",
+              CorteAtivo = "10DU" && MesSelecionado = 1,  "12/12/2025",
+              CorteAtivo = "1DU"  && MesSelecionado = 2,  "02/01/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 2,  "08/01/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 2,  "15/01/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 3,  "02/02/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 3,  "06/02/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 3,  "13/02/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 4,  "02/03/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 4,  "06/03/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 4,  "13/03/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 5,  "01/04/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 5,  "08/04/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 5,  "15/04/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 6,  "04/05/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 6,  "08/05/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 6,  "15/05/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 7,  "01/06/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 7,  "08/06/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 7,  "15/06/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 8,  "01/07/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 8,  "07/07/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 8,  "14/07/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 9,  "03/08/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 9,  "07/08/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 9,  "14/08/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 10, "01/09/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 10, "08/09/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 10, "15/09/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 11, "01/10/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 11, "07/10/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 11, "15/10/2026",
+              CorteAtivo = "1DU"  && MesSelecionado = 12, "03/11/2026",
+              CorteAtivo = "5DU"  && MesSelecionado = 12, "09/11/2026",
+              CorteAtivo = "10DU" && MesSelecionado = 12, "16/11/2026",
+              ""
+          )
+      RETURN
+          IF(
+              ISBLANK(CorteAtivo) || CorteAtivo = "MES_ATUAL",
+              "Total de entregas: Visão Atual",
+              IF(
+                  ISBLANK(TotalLinhas) || TotalLinhas = 0,
+                  CorteLabel & " de " & MesLabel & " previsto para " & DataPrevista,
+                  "Total de entregas de " & MesLabel & " até " & DataCorte & " (" & CorteLabel & ")"
+              )
+          )
+    - Cor Variação Entrega Diretor:
+      
+      VAR MesAtual = CALCULATE(MAX(CALENDARIO[Mes_Num]), ALLSELECTED(CALENDARIO))
+      VAR AnoAtual = CALCULATE(MAX(CALENDARIO[Ano]), ALLSELECTED(CALENDARIO))
+      
+      VAR MesAnteriorNum = IF(MesAtual = 1, 12, MesAtual - 1)
+      VAR AnoAnteriorNum = IF(MesAtual = 1, AnoAtual - 1, AnoAtual)
+      
+      VAR PctAtual =
+      CALCULATE(
+          [% Entrega],
+          FILTER(ALL(CALENDARIO),
+              CALENDARIO[Mes_Num] = MesAtual &&
+              CALENDARIO[Ano] = AnoAtual
+          )
+      )
+      
+      VAR PctAnterior =
+      CALCULATE(
+          [% Entrega],
+          FILTER(ALL(CALENDARIO),
+              CALENDARIO[Mes_Num] = MesAnteriorNum &&
+              CALENDARIO[Ano] = AnoAnteriorNum
+          )
+      )
+      
+      VAR Variacao = PctAtual - PctAnterior
+      
+      RETURN
+      SWITCH(
+          TRUE(),
+          ISBLANK(PctAnterior) || ISBLANK(PctAtual), "#808080",
+          Variacao > 0, "#2E7D32",   -- verde
+          Variacao < 0, "#C62828",   -- vermelho
+          "#808080"
+      )
+    - Cor Performance Diretor:
+      
+      VAR MesAtual = CALCULATE(MAX(FatoAgendas[Mes_Num]), ALL(FatoAgendas))
+      VAR AnoAtual = CALCULATE(MAX(FatoAgendas[Ano]), ALL(FatoAgendas))
+      
+      VAR Entrega =
+      DIVIDE(
+          CALCULATE(
+              [Qtd Entregues Diretor],
+              ALL(CALENDARIO),
+              CALENDARIO[Mes_Num] = INT(MesAtual),
+              CALENDARIO[Ano] = INT(AnoAtual)
+          ),
+          CALCULATE(
+              [Qtd Consideradas Diretor],
+              ALL(CALENDARIO),
+              CALENDARIO[Mes_Num] = INT(MesAtual),
+              CALENDARIO[Ano] = INT(AnoAtual)
+          )
+      )
+      
+      RETURN
+      SWITCH(
+          TRUE(),
+          ISBLANK(Entrega), "#808080",
+          Entrega >= 0.90, "#2E7D32",   -- verde
+          Entrega < 0.90, "#C62828"     -- vermelho
+      )
+    - Pct Hist Dinamico:
+      
+      VAR Positivas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[Classificacao Status Hist] = "Positivo"
+          )
+      VAR Consideradas =
+          CALCULATE(
+              COUNTROWS(FatoHistorico),
+              FatoHistorico[Classificacao Status Hist] <> "Nao Considerar"
+          )
+      RETURN
+          IF(
+              ISBLANK(Consideradas) || Consideradas = 0,
+              0,
+              DIVIDE(Positivas, Consideradas)
+          )
+    - Hist Positivas:
+      
+      CALCULATE(
+          COUNTROWS(FatoHistorico),
+          FatoHistorico[Classificacao Status Hist] = "Positivo"
+      )
+    - Hist Consideradas:
+      
+      CALCULATE(
+          COUNTROWS(FatoHistorico),
+          FatoHistorico[Classificacao Status Hist] <> "Nao Considerar"
+      )
+    - ##Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+    - Mai/26:
+      
+      VAR _MesAno = "mai/2026"
+      VAR _Resultado = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno)
+      )
+      RETURN
+      IF(ISBLANK(_Resultado), "-", FORMAT(_Resultado, "0.0%"))
+    - Mes_Filtrado_Label:
+      
+      VAR AnoSelecionado = SELECTEDVALUE(CALENDARIO[Ano])
+      VAR MesSelecionado = SELECTEDVALUE(CALENDARIO[Mes_Nome])
+      RETURN
+          IF(
+              NOT ISBLANK(AnoSelecionado) && NOT ISBLANK(MesSelecionado),
+              "| " & MesSelecionado & "/" & FORMAT(AnoSelecionado, "0000"),
+              "Todos os períodos"
+          )
+    - Jun/26:
+      
+      VAR _MesAno = "jun/2026"
+      VAR _Resultado = DIVIDE(
+          CALCULATE([Qtd Entregues Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno),
+          CALCULATE([Qtd Consideradas Diretor], ALL(CALENDARIO), CALENDARIO[Mes_Ano] = _MesAno)
+      )
+      RETURN
+      IF(ISBLANK(_Resultado), "-", FORMAT(_Resultado, "0.0%"))
+    - Debug Diferenca:
+      
+      VAR TotalAtual = [Qtd Agendas Consideradas]
+      VAR Total5DU = [Qtd Agendas Consideradas D]
+      RETURN
+          TotalAtual - Total5DU
+    - Debug Mes:
+      SELECTEDVALUE(CALENDARIO[Mes_Num])
+----------------------------------------
+Tabela: Dt_Atualizacao
+  Colunas:
+    - Dt_Atualizacao [dateTime]
+----------------------------------------
+Tabela: dDiretoria
+  Colunas:
+    - ID [string]
+    - DIRETOR [string]
+    - DIRETORIA [string]
+    - CD_MUNICIPIO [int64]
+    - NM_CIDADE [string]
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+    - CD_CLASSIFICACAO [string]
+    - DS_CLASSIFICACAO [string]
+    - CASSIFICAÇÃO NOVA [string]
+----------------------------------------
+Tabela: dCidade
+  Colunas:
+    - COD_UNIDADE [int64]
+    - NM_CIDADE [string]
+    - COD_FILIAL [int64]
+    - NM_FILIAL [string]
+    - UF [string]
+    - EMPRESA [string]
+    - TIPO [string]
+    - REGIONAL [string]
+    - CD_LOCALIDADE [string]
+    - CD_CIDADE_IBGE [int64]
+    - NM_RAZAO SOCIAL [string]
+    - NM_FANTASIA [string]
+    - NM_SITE [string]
+    - DISTRITO [string]
+    - LOCALIZAÇÃO [string]
+    - SUB REGIAO [string]
+    - REGIAO BRASIL [string]
+    - COD_EMPRESA [int64]
+    - CD_EMP_UNIF [int64]
+    - POLO_NOVO [string]
+    - CD_LOCALIDADE_POLO [string]
+    - APENAS [string]
+    - CAPTADO [string]
+    - RESPONSAVEL [string]
+    - POLO [string]
+    - STATUS [string]
+    - TIPO_REDE [string]
+    - NR_TIPO_SERVICO_SAUDE [string]
+    - CD_CLASSIFICACAO [string]
+----------------------------------------
+Tabela: dEspecialidade
+  Colunas:
+    - CD_ESPECIALIDADE [int64]
+    - DS_ESPECIALIDADE [string]
+----------------------------------------
+Tabela: dTipo
+  Colunas:
+    - CD_CLASSIFICACAO [string]
+    - DS_TIPO [string]
+----------------------------------------
+Tabela: dCorte
+  Colunas:
+    - Corte [string]
+    - Ordem [int64]
+    - Label [string]
+----------------------------------------
+Tabela: FatoHistorico
+  Colunas:
+    - CORTE [string]
+    - MES_REF [string]
+    - DATA_CORTE [string]
+    - EMPRESA [string]
+    - FILIAL [string]
+    - UNIDADE [string]
+    - MÉDICO [string]
+    - ESPECIALIDADE [string]
+    - STATUS DA NÃO ABERTURA DE AGENDA [string]
+    - Classificacao Status Hist [string] (Calculada)
+    - CD_ESPECIALIDADE [string]
+    - ChaveLocalEsp [string]
+    - CD_LOCAL [int64]
+    - ChaveLocalEsp_Display [string] (Calculada)
+    - ChaveLocalEsp_Final [string] (Calculada)
+    - CD_MEDICO [int64]
+    - ChaveCidade [string] (Calculada)
+    - REGIONAL_FILTER [string] (Calculada)
+    - EMPRESA_FILTER [string] (Calculada)
+    - REGIONAL [string]
+    - CD_CIDADE_IBGE [int64]
+    - CD_CLASSIFICACAO [string]
+    - RESPONSAVEL [string]
+    - CIDADE [string]
+    - UF [string]
+    - ChaveUnidade [string] (Calculada)
+----------------------------------------
+Tabela: tabelaCorteHist
+  Colunas:
+    - CORTE [string]
+    - MES_REF [string]
+    - REGIONAL [string]
+    - CD_CLASSIFICACAO [string]
+    - DS_TIPO [string]
+    - Positivas [int64]
+    - Consideradas [int64]
+    - Pct [double]
+----------------------------------------
+Tabela: dGerencia
+  Colunas:
+    - RESPONSAVEL [string]
+    - GERENCIA [string]
+----------------------------------------
+Tabela: dCidadeFilter
+  Colunas:
+    - CIDADE [string]
+    - UF [string]
+    - ChaveCidade [string] (Calculada)
+----------------------------------------
+Tabela: dRegionalFilter
+  Colunas:
+    - REGIONAL [string]
+----------------------------------------
+Tabela: dEmpresaFilter
+  Colunas:
+    - EMPRESA [string]
+----------------------------------------
+Tabela: dEspecialidadeFilter
+  Colunas:
+    - ESPECIALIDADE [string]
+    - CD_ESPECIALIDADE [int64]
+----------------------------------------
+Tabela: dFilialFilter
+  Colunas:
+    - FILIAL [string]
+----------------------------------------
+Tabela: dUnidadeFilter
+  Colunas:
+    - UNIDADE [string]
+    - FILIAL [string]
+    - ChaveUnidade [string] (Calculada)
+----------------------------------------
+Tabela: dTipoUnidadeVS
+  Colunas:
+    - Tipo [string]
+    - CD_LOCAL [int64]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+CALENDARIO[Data] ---> LocalDateTable_fdf663d8-89cf-4f89-ad99-0323af8840d1[Date]
+FatoAgendas[Data_Referencia] ---> CALENDARIO[Data]
+Dt_Atualizacao[Dt_Atualizacao] ---> LocalDateTable_d9aa9748-86ec-4ee7-ac24-7655394eaf7f[Date]
+FatoAgendas[CD_CLASSIFICACAO] ---> dTipo[CD_CLASSIFICACAO]
+FatoHistorico[CORTE] ---> dCorte[Corte]
+FatoAgendas[ChaveLocalEsp_Final] ---> dDiretoria[ID]
+FatoHistorico[ChaveLocalEsp] ---> dDiretoria[ID]
+FatoAgendas[ChaveCidade] ---> dCidadeFilter[ChaveCidade]
+FatoHistorico[ChaveCidade] ---> dCidadeFilter[ChaveCidade]
+FatoHistorico[REGIONAL_FILTER] ---> dRegionalFilter[REGIONAL]
+FatoAgendas[REGIONAL_FILTER] ---> dRegionalFilter[REGIONAL]
+FatoHistorico[EMPRESA] ---> dEmpresaFilter[EMPRESA]
+FatoAgendas[EMPRESA] ---> dEmpresaFilter[EMPRESA]
+FatoHistorico[CD_CLASSIFICACAO] ---> dTipo[CD_CLASSIFICACAO]
+FatoHistorico[CD_ESPECIALIDADE] ---> dEspecialidadeFilter[CD_ESPECIALIDADE]
+FatoAgendas[CD_ESPECIALIDADE] ---> dEspecialidadeFilter[CD_ESPECIALIDADE]
+FatoHistorico[FILIAL] ---> dFilialFilter[FILIAL]
+FatoAgendas[FILIAL] ---> dFilialFilter[FILIAL]
+FatoAgendas[ChaveUnidade] ---> dUnidadeFilter[ChaveUnidade]
+FatoHistorico[ChaveUnidade] ---> dUnidadeFilter[ChaveUnidade]
+FatoAgendas[RESPONSAVEL] ---> dGerencia[RESPONSAVEL]
+FatoAgendas[CD_LOCAL] ---> dTipoUnidadeVS[CD_LOCAL]
+FatoHistorico[CD_LOCAL] ---> dTipoUnidadeVS[CD_LOCAL]

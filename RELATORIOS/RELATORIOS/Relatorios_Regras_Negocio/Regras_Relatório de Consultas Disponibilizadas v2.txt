@@ -1,0 +1,180 @@
+============================================================
+MAPEAMENTO DE REGRAS: Relatório de Consultas Disponibilizadas v2.pbit
+============================================================
+
+--- TABELAS, COLUNAS E MEDIDAS (DAX) ---
+
+Tabela: dCidade
+  Colunas:
+    - NM_RAZAO SOCIAL [string]
+    - NM_FANTASIA [string]
+    - NM_SITE [string]
+    - NM_CIDADE [string]
+    - COD_FILIAL [int64]
+    - NM_FILIAL [string]
+    - UF [string]
+    - DISTRITO [string]
+    - EMPRESA [string]
+    - LOCALIZAÇÃO [string]
+    - TIPO [string]
+    - REGIONAL [string]
+    - REGIAO BRASIL [string]
+    - CD_LOCALIDADE [string]
+    - COD_UNIDADE [string]
+    - COD_EMPRESA [double]
+    - CD_EMP_UNIF [double]
+    - SUB REGIAO [string]
+    - CD_LOCALIDADE_POLO [string]
+    - CD_CIDADE_IBGE [double]
+    - ENDERECO [string]
+    - RUA [string]
+    - NUMERO [double]
+    - BAIRRO [string]
+    - TIPO_LOGRADOURO [string]
+    - CEP [double]
+    - LATITUDE [string]
+    - LONGITUDE [string]
+    - CD_LOCALIDADE_CIDADE [string]
+    - APENAS [string]
+    - CAPTADO [string]
+    - RESPONSAVEL [string]
+    - POLO [string]
+    - STATUS [string]
+    - TIPO_REDE [string]
+    - NR_TIPO_SERVICO_SAUDE [string]
+----------------------------------------
+Tabela: dEspecialidade
+  Colunas:
+    - CD_ESPECIALIDADE [string]
+    - DS_ESPECIALIDADE [string]
+----------------------------------------
+Tabela: dMedico
+  Colunas:
+    - CD_MEDICO [string]
+    - NM_MEDICO [string]
+----------------------------------------
+Tabela: fDisponibilizadas
+  Colunas:
+    - DT_REF [dateTime]
+    - CD_LOCAL [string]
+    - CD_MEDICO [string]
+    - CD_ESPECIALIDADE [string]
+    - QTE_DISPONIBILIZADA [int64]
+    - QTE_BLOQUEADA [int64]
+    - CD_CLASSIFICACAO [int64]
+----------------------------------------
+Tabela: dCalendario
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Nm_Mes [string]
+    - Nm_Mes_Abrev [string]
+    - Mes_Ano [string]
+    - Classif_MesAno [int64]
+    - Dia_Sem_Nome [string]
+    - Dia_Sem_Abrev [string]
+    - Dia_Semana_No. [int64]
+    - Dia_Sem_Letra [string]
+    - Trimestre [string]
+    - SemanaAno [int64]
+    - FimDeSemana [string]
+    - Dia_Mes [string]
+----------------------------------------
+Tabela: #MEDIDAS
+  Medidas DAX (Regras de Negócio):
+    - Qt Registros:
+      COUNTROWS(fDisponibilizadas)
+    - Qt Disponib.:
+      SUM(fDisponibilizadas[QTE_DISPONIBILIZADA])
+    - Qt Medicos:
+      DISTINCTCOUNT( fDisponibilizadas[CD_MEDICO] )
+    - Msg Boas Vindas:
+      
+      VAR vUsuario = LEFT(USERPRINCIPALNAME(), FIND("@", USERPRINCIPALNAME()) - 1)
+      VAR vHorarioAtual = NOW() - TIME(3, 0, 0) // Subtrai 3 horas para ajustar ao fuso horário de Brasília (UTC -3)
+      VAR vSaudacao = 
+          SWITCH(
+              TRUE(),
+              HOUR(vHorarioAtual) < 12, ", bom dia. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) < 18, ", boa tarde. Seja bem-vindo(a)!",
+              HOUR(vHorarioAtual) <= 23, ", boa noite. Seja bem-vindo(a)!"
+          )
+      RETURN
+      "Olá, " & vUsuario & vSaudacao
+      
+    - Qtde Disp Formatada:
+      
+      FORMAT([Qt Disponib.], "#,0") 
+    - Atualizado em:
+      
+       VAR vDataAtualizacao = SELECTEDVALUE(DT_ATUALIZACAO[DT_ATUALIZACAO])
+       RETURN
+       "Atualizado em: " & vDataAtualizacao
+    - Qtde Disp T0012:
+      SUM(fDispT0012[Qtde Disponib.])
+    - Qtde Disp Format2:
+      
+      FORMAT([Qtde Disp T0012], "#,0") 
+    - Eixo Ajustado:
+      [Qt Medicos] * 1.2
+    - Qt Registros T0012:
+      COUNTROWS(fDispT0012)
+    - Cidade Filtrada:
+      
+      CALCULATE(
+          VALUES(dCidade[COD_UNIDADE]),
+          CROSSFILTER(dCidade[COD_UNIDADE], fDisponibilizadas[CD_LOCAL], BOTH)
+      )
+      
+----------------------------------------
+Tabela: DT_ATUALIZACAO
+  Colunas:
+    - DT_ATUALIZACAO [dateTime]
+----------------------------------------
+Tabela: fDispT0012
+  Colunas:
+    - CD_LOCAL [string]
+    - CD_ESPECIALIDADE [int64]
+    - DT_AGENDA [dateTime]
+    - Qtde Disponib. [int64]
+    - Qtde Marcadas [int64]
+    - CD_CLASSIFICACAO [int64]
+----------------------------------------
+Tabela: dCalendarioT0012
+  Colunas:
+    - Date [dateTime]
+    - Ano [int64]
+    - Mes [int64]
+    - Dia [int64]
+    - Nm_Mes [string]
+    - Nm_Mes_Abrev [string]
+    - Mes_Ano [string]
+    - Classif_MesAno [int64]
+    - Dia_Sem_Nome [string]
+    - Dia_Sem_Abrev [string]
+    - Dia_Semana_No. [int64]
+    - Dia_Sem_Letra [string]
+    - Trimestre [string]
+    - SemanaAno [int64]
+    - FimDeSemana [string]
+    - Dia_Mes [string]
+----------------------------------------
+Tabela: dClassificacao
+  Colunas:
+    - CD_CLASSIFICACAO [int64]
+    - DS_CLASSIFICACAO [string]
+----------------------------------------
+
+--- RELACIONAMENTOS DO MODELO ---
+
+fDisponibilizadas[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+fDisponibilizadas[CD_MEDICO] ---> dMedico[CD_MEDICO]
+fDispT0012[CD_ESPECIALIDADE] ---> dEspecialidade[CD_ESPECIALIDADE]
+fDisponibilizadas[CD_LOCAL] ---> dCidade[COD_UNIDADE]
+fDispT0012[CD_LOCAL] ---> dCidade[COD_UNIDADE]
+fDisponibilizadas[CD_CLASSIFICACAO] ---> dClassificacao[CD_CLASSIFICACAO]
+fDispT0012[CD_CLASSIFICACAO] ---> dClassificacao[CD_CLASSIFICACAO]
+fDisponibilizadas[DT_REF] ---> dCalendario[Date]
+fDispT0012[DT_AGENDA] ---> dCalendarioT0012[Date]
